@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>CheapData NG</title>
+
+<style>
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#f4f7fb;
+    color:#172033;
+}
+
+header{
+    background:#075e54;
+    color:white;
+    padding:18px 5%;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    position:sticky;
+    top:0;
+    z-index:100;
+}
+
+.logo{
+    font-size:22px;
+    font-weight:bold;
+}
+
+nav button{
+    background:white;
+    color:#075e54;
+    border:none;
+    padding:9px 14px;
+    border-radius:6px;
+    margin-left:5px;
+    cursor:pointer;
+}
+
+.page{
+    display:none;
+    min-height:90vh;
+    padding:30px 5%;
+}
+
+.active{
+    display:block;
+}
+
+/* HOME */
+
+.hero{
+    text-align:center;
+    padding:70px 10px;
+}
+
+.hero h1{
+    font-size:42px;
+    color:#075e54;
+    margin-bottom:15px;
+}
+
+.hero p{
+    font-size:18px;
+    margin-bottom:25px;
+}
+
+.main-btn{
+    background:#075e54;
+    color:white;
+    border:none;
+    padding:14px 25px;
+    border-radius:7px;
+    font-size:16px;
+    cursor:pointer;
+}
+
+/* AUTH */
+
+.auth-box{
+    max-width:420px;
+    margin:30px auto;
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 5px 20px rgba(0,0,0,.08);
+}
+
+.auth-box h2{
+    text-align:center;
+    margin-bottom:20px;
+    color:#075e54;
+}
+
+input,select{
+    width:100%;
+    padding:13px;
+    margin:8px 0 15px;
+    border:1px solid #ddd;
+    border-radius:6px;
+}
+
+.auth-box button{
+    width:100%;
+}
+
+/* DASHBOARD */
+
+.welcome{
+    background:#075e54;
+    color:white;
+    padding:25px;
+    border-radius:12px;
+    margin-bottom:25px;
+}
+
+.networks{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:20px;
+}
+
+.network{
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,.07);
+}
+
+.network h3{
+    color:#075e54;
+    margin-bottom:15px;
+}
+
+.data-card{
+    border:1px solid #eee;
+    padding:15px;
+    border-radius:8px;
+    margin-top:10px;
+}
+
+.data-card strong{
+    display:block;
+    margin-bottom:5px;
+}
+
+.buy-btn{
+    margin-top:10px;
+    width:100%;
+    padding:10px;
+    background:#075e54;
+    color:white;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+/* ORDERS */
+
+.order{
+    background:white;
+    padding:15px;
+    margin:10px 0;
+    border-radius:8px;
+    border-left:5px solid #075e54;
+}
+
+/* FOOTER */
+
+footer{
+    text-align:center;
+    background:#172033;
+    color:white;
+    padding:20px;
+    margin-top:30px;
+}
+
+@media(max-width:600px){
+    .hero h1{
+        font-size:32px;
+    }
+
+    header{
+        flex-direction:column;
+        gap:12px;
+    }
+
+    nav button{
+        padding:7px 10px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+
+<div class="logo">
+CheapData NG
+</div>
+
+<nav>
+
+<button onclick="showPage('home')">
+Home
+</button>
+
+<button onclick="showPage('login')">
+Login
+</button>
+
+<button onclick="showPage('signup')">
+Sign Up
+</button>
+
+<button onclick="showPage('dashboard')">
+Buy Data
+</button>
+
+</nav>
+
+</header>
+
+
+<!-- HOME PAGE -->
+
+<section id="home" class="page active">
+
+<div class="hero">
+
+<h1>Welcome to CheapData NG</h1>
+
+<p>
+Buy affordable internet data bundles quickly and easily.
+</p>
+
+<button class="main-btn" onclick="showPage('signup')">
+Get Started
+</button>
+
+</div>
+
+</section>
+
+
+<!-- SIGN UP -->
+
+<section id="signup" class="page">
+
+<div class="auth-box">
+
+<h2>Create Account</h2>
+
+<form onsubmit="signup(event)">
+
+<input
+id="signupName"
+type="text"
+placeholder="Full Name"
+required
+>
+
+<input
+id="signupEmail"
+type="email"
+placeholder="Email Address"
+required
+>
+
+<input
+id="signupPhone"
+type="tel"
+placeholder="Phone Number"
+required
+>
+
+<input
+id="signupPassword"
+type="password"
+placeholder="Password"
+required
+>
+
+<button class="main-btn" type="submit">
+Create Account
+</button>
+
+</form>
+
+<p style="text-align:center;margin-top:15px;">
+Already have an account?
+<a href="#" onclick="showPage('login')">
+Login
+</a>
+</p>
+
+</div>
+
+</section>
+
+
+<!-- LOGIN -->
+
+<section id="login" class="page">
+
+<div class="auth-box">
+
+<h2>Login</h2>
+
+<form onsubmit="login(event)">
+
+<input
+id="loginEmail"
+type="email"
+placeholder="Email Address"
+required
+>
+
+<input
+id="loginPassword"
+type="password"
+placeholder="Password"
+required
+>
+
+<button class="main-btn" type="submit">
+Login
+</button>
+
+</form>
+
+<p style="text-align:center;margin-top:15px;">
+Don't have an account?
+<a href="#" onclick="showPage('signup')">
+Sign Up
+</a>
+</p>
+
+</div>
+
+</section>
+
+
+<!-- DASHBOARD -->
+
+<section id="dashboard" class="page">
+
+<div class="welcome">
+
+<h2 id="userWelcome">
+Welcome!
+</h2>
+
+<p>
+Select your network and data bundle below.
+</p>
+
+</div>
+
+
+<div class="networks">
+
+
+<!-- MTN -->
+
+<div class="network">
+
+<h3>MTN</h3>
+
+<div class="data-card">
+
+<strong>500MB</strong>
+
+₦150
+
+<button
+class="buy-btn"
+onclick="buyData('MTN','500MB',150)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>1GB</strong>
+
+₦300
+
+<button
+class="buy-btn"
+onclick="buyData('MTN','1GB',300)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>2GB</strong>
+
+₦550
+
+<button
+class="buy-btn"
+onclick="buyData('MTN','2GB',550)">
+Buy Now
+</button>
+
+</div>
+
+</div>
+
+
+<!-- AIRTEL -->
+
+<div class="network">
+
+<h3>Airtel</h3>
+
+<div class="data-card">
+
+<strong>500MB</strong>
+
+₦150
+
+<button
+class="buy-btn"
+onclick="buyData('Airtel','500MB',150)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>1GB</strong>
+
+₦300
+
+<button
+class="buy-btn"
+onclick="buyData('Airtel','1GB',300)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>2GB</strong>
+
+₦550
+
+<button
+class="buy-btn"
+onclick="buyData('Airtel','2GB',550)">
+Buy Now
+</button>
+
+</div>
+
+</div>
+
+
+<!-- GLO -->
+
+<div class="network">
+
+<h3>Glo</h3>
+
+<div class="data-card">
+
+<strong>500MB</strong>
+
+₦140
+
+<button
+class="buy-btn"
+onclick="buyData('Glo','500MB',140)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>1GB</strong>
+
+₦280
+
+<button
+class="buy-btn"
+onclick="buyData('Glo','1GB',280)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>2GB</strong>
+
+₦520
+
+<button
+class="buy-btn"
+onclick="buyData('Glo','2GB',520)">
+Buy Now
+</button>
+
+</div>
+
+</div>
+
+
+<!-- 9MOBILE -->
+
+<div class="network">
+
+<h3>9mobile</h3>
+
+<div class="data-card">
+
+<strong>500MB</strong>
+
+₦150
+
+<button
+class="buy-btn"
+onclick="buyData('9mobile','500MB',150)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>1GB</strong>
+
+₦300
+
+<button
+class="buy-btn"
+onclick="buyData('9mobile','1GB',300)">
+Buy Now
+</button>
+
+</div>
+
+<div class="data-card">
+
+<strong>2GB</strong>
+
+₦550
+
+<button
+class="buy-btn"
+onclick="buyData('9mobile','2GB',550)">
+Buy Now
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- ORDERS -->
+
+<section id="orders" class="page">
+
+<h2>My Orders</h2>
+
+<div id="orderList"></div>
+
+</section>
+
+
+<footer>
+
+<p>
+CheapData NG © 2026
+</p>
+
+<p>
+Affordable Data • Fast Service
+</p>
+
+</footer>
+
+
+<script>
+function showPage(page) {
+    document.querySelectorAll(".page").forEach(function(section) {
+        section.classList.remove("active");
+    });
+
+    const selectedPage = document.getElementById(page);
+
+    if (selectedPage) {
+        selectedPage.classList.add("active");
+    }
+}
+
+
+async function signup(event) {
+    event.preventDefault();
+
+    const name = document.getElementById("signupName").value.trim();
+    const email = document.getElementById("signupEmail").value.trim();
+    const phone = document.getElementById("signupPhone").value.trim();
+    const password = document.getElementById("signupPassword").value;
+
+    try {
+        const response = await fetch("/api/signup", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                name: name,
+                email: email,
+                phone: phone,
+                password: password
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.message || "Signup failed.");
+            return;
+        }
+
+        alert("Account created successfully!");
+
+        document.getElementById("signupName").value = "";
+        document.getElementById("signupEmail").value = "";
+        document.getElementById("signupPhone").value = "";
+        document.getElementById("signupPassword").value = "";
+
+        showPage("login");
+
+    } catch (error) {
+        console.error(error);
+        alert("Unable to connect to the server.");
+    }
+}
+
+
+async function login(event) {
+    event.preventDefault();
+
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+
+    try {
+        const response = await fetch("/api/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                email: email,
+                password: password
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.message || "Login failed.");
+            return;
+        }
+
+        localStorage.setItem("loggedIn", "true");
+        localStorage.setItem("cheapDataUser", JSON.stringify(result.user));
+
+        document.getElementById("userWelcome").innerText =
+            "Welcome, " + result.user.name + "!";
+
+        alert("Login successful!");
+
+        showPage("dashboard");
+
+    } catch (error) {
+        console.error(error);
+        alert("Unable to connect to the server.");
+    }
+}
+
+
+async function buyData(network, data, price) {
+    if (localStorage.getItem("loggedIn") !== "true") {
+        alert("Please login before buying data.");
+        showPage("login");
+        return;
+    }
+
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    if (!savedUser || !savedUser.id) {
+        alert("Please login again.");
+        showPage("login");
+        return;
+    }
+
+    const phone = prompt(
+        "Enter the phone number to receive the data:"
+    );
+
+    if (!phone) {
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/orders", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                user_id: savedUser.id,
+                network: network,
+                data: data,
+                price: price,
+                phone: phone
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.message || "Order failed.");
+            return;
+        }
+
+        alert(
+            "Order created successfully!\\n\\n" +
+            network + " " + data +
+            "\\nPrice: ₦" + price +
+            "\\nPhone: " + phone
+        );
+
+        showOrders();
+
+    } catch (error) {
+        console.error(error);
+        alert("Unable to connect to the server.");
+    }
+}
+
+async function showOrders() {
+    showPage("orders");
+
+    const list = document.getElementById("orderList");
+
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    if (!savedUser || !savedUser.id) {
+        list.innerHTML = "<p>Please login to view your orders.</p>";
+        return;
+    }
+
+    list.innerHTML = "<p>Loading orders...</p>";
+
+    try {
+        const response = await fetch(
+            "/api/orders/" + savedUser.id
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            list.innerHTML =
+                "<p>" +
+                (result.message || "Unable to load orders.") +
+                "</p>";
+            return;
+        }
+
+        const orders = result.orders || [];
+
+        if (orders.length === 0) {
+            list.innerHTML = "<p>You have no orders yet.</p>";
+            return;
+        }
+
+        list.innerHTML = "";
+
+        orders.forEach(function(order) {
+            const div = document.createElement("div");
+
+            div.className = "order";
+
+            div.innerHTML =
+                "<strong>" + order.network + "</strong><br>" +
+                "Data: " + order.data + "<br>" +
+                "Price: ₦" + order.price + "<br>" +
+                "Phone: " + order.phone + "<br>" +
+                "Status: " + order.status + "<br>" +
+                "Date: " + order.date;
+
+            list.appendChild(div);
+        });
+
+    } catch (error) {
+        console.error(error);
+        list.innerHTML =
+            "<p>Unable to connect to the server.</p>";
+    }
+}
+
+window.onload = function() {
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser")
+    );
+
+    if (savedUser) {
+        const welcome = document.getElementById("userWelcome");
+
+        if (welcome) {
+            welcome.innerText =
+                "Welcome, " + savedUser.name + "!";
+        }
+    }
+};
+</script>
+
+</body>
+</html>

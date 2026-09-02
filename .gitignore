@@ -1,0 +1,10 @@
+*.db
+*.backup*
+*.before-*
+*.safe
+*.working
+*.jynode_modules/
+.env
+*.tar.gz
+*.backup
+*.before-orders
