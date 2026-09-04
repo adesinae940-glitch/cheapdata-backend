@@ -1,10 +1,9 @@
-
 const express = require("express");
 const path = require("path");
 const initSqlJs = require("sql.js");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
-
+const axios = require("axios");
 const app = express();
 
 app.use(express.json());
@@ -16,6 +15,7 @@ let db;
 async function startServer() {
   const SQL = await initSqlJs();
 
+  // Load existing database
   if (fs.existsSync(dbPath)) {
     const file = fs.readFileSync(dbPath);
     db = new SQL.Database(file);
@@ -23,15 +23,34 @@ async function startServer() {
     db = new SQL.Database();
   }
 
+  // =========================
+  // USERS TABLE
+  // =========================
+
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       phone TEXT NOT NULL,
-      password TEXT NOT NULL
+      password TEXT NOT NULL,
+      wallet_balance REAL NOT NULL DEFAULT 0
     )
   `);
+
+  // Add wallet column to an existing users table
+  try {
+    db.run(`
+      ALTER TABLE users
+      ADD COLUMN wallet_balance REAL NOT NULL DEFAULT 0
+    `);
+  } catch (error) {
+    // Column already exists
+  }
+
+  // =========================
+  // ORDERS TABLE
+  // =========================
 
   db.run(`
     CREATE TABLE IF NOT EXISTS orders (
@@ -47,12 +66,33 @@ async function startServer() {
     )
   `);
 
+  // =========================
+  // WALLET TRANSACTIONS TABLE
+  // =========================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS wallet_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT NOT NULL,
+      reference TEXT UNIQUE NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Save database
   fs.writeFileSync(
     dbPath,
     Buffer.from(db.export())
   );
 
-  
+  // =========================
+  // SIGN UP
+  // =========================
+
   app.post("/api/signup", async (req, res) => {
     try {
       const { name, email, phone, password } = req.body;
@@ -77,7 +117,9 @@ async function startServer() {
       const hashedPassword = await bcrypt.hash(password, 10);
 
       db.run(
-        "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)",
+        `INSERT INTO users
+        (name, email, phone, password, wallet_balance)
+        VALUES (?, ?, ?, ?, 0)`,
         [name, email, phone, hashedPassword]
       );
 
@@ -99,6 +141,10 @@ async function startServer() {
     }
   });
 
+  // =========================
+  // LOGIN
+  // =========================
+
   app.post("/api/login", async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -110,7 +156,9 @@ async function startServer() {
       }
 
       const result = db.exec(
-        "SELECT id, name, email, phone, password FROM users WHERE email = ?",
+        `SELECT id, name, email, phone, password
+         FROM users
+         WHERE email = ?`,
         [email]
       );
 
@@ -150,13 +198,127 @@ async function startServer() {
         message: "Server error"
       });
     }
-    });
+  });
+
+  // =========================
+  // GET WALLET BALANCE
+  // =========================
+
+  app.get("/api/wallet/:user_id", (req, res) => {
+    try {
+      const userId = Number(req.params.user_id);
+
+      if (!Number.isInteger(userId) || userId <= 0) {
+        return res.status(400).json({
+          message: "Invalid user ID"
+        });
+      }
+
+      const result = db.exec(
+        `SELECT id, name, wallet_balance
+         FROM users
+         WHERE id = ?`,
+        [userId]
+      );
+
+      if (result.length === 0 || result[0].values.length === 0) {
+        return res.status(404).json({
+          message: "User not found"
+        });
+      }
+
+      const user = result[0].values[0];
+
+      res.json({
+        status: "success",
+        wallet: {
+          userId: user[0],
+          name: user[1],
+          balance: user[2]
+        }
+      });
+
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        message: "Server error"
+      });
+    }
+  });
+
+  // =========================
+  // WALLET TRANSACTIONS
+  // =========================
+
+  app.get("/api/wallet/transactions/:user_id", (req, res) => {
+    try {
+      const userId = Number(req.params.user_id);
+
+      if (!Number.isInteger(userId) || userId <= 0) {
+        return res.status(400).json({
+          message: "Invalid user ID"
+        });
+      }
+
+      const result = db.exec(
+        `SELECT id, type, amount, status, reference, created_at
+         FROM wallet_transactions
+         WHERE user_id = ?
+         ORDER BY id DESC`,
+        [userId]
+      );
+
+      const transactions = [];
+
+      if (result.length > 0) {
+        result[0].values.forEach(row => {
+          transactions.push({
+            id: row[0],
+            type: row[1],
+            amount: row[2],
+            status: row[3],
+            reference: row[4],
+            date: row[5]
+          });
+        });
+      }
+
+      res.json({
+        status: "success",
+        transactions
+      });
+
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        message: "Server error"
+      });
+    }
+  });
+
+  // =========================
+  // CREATE ORDER
+  // =========================
 
   app.post("/api/orders", (req, res) => {
     try {
-      const { user_id, network, data, price, phone } = req.body;
+      const {
+        user_id,
+        network,
+        data,
+        price,
+        phone
+      } = req.body;
 
-      if (!user_id || !network || !data || !price || !phone) {
+      if (
+        !user_id ||
+        !network ||
+        !data ||
+        !price ||
+        !phone
+      ) {
         return res.status(400).json({
           message: "All order fields are required"
         });
@@ -187,11 +349,15 @@ async function startServer() {
     }
   });
 
+  // =========================
+  // GET ORDERS
+  // =========================
+
   app.get("/api/orders/:user_id", (req, res) => {
     try {
       const userId = Number(req.params.user_id);
 
-      if (!userId) {
+      if (!Number.isInteger(userId) || userId <= 0) {
         return res.status(400).json({
           message: "Invalid user ID"
         });
@@ -221,7 +387,9 @@ async function startServer() {
         });
       }
 
-      res.json({ orders });
+      res.json({
+        orders
+      });
 
     } catch (error) {
       console.error(error);
@@ -232,19 +400,129 @@ async function startServer() {
     }
   });
 
+  // =========================
+  
+  // =========================
+  // INITIALIZE PAYSTACK PAYMENT
+  // =========================
+
+  app.post("/api/wallet/fund", async (req, res) => {
+    try {
+      const { user_id, amount } = req.body;
+
+      if (!user_id || !amount) {
+        return res.status(400).json({
+          message: "User ID and amount are required"
+        });
+      }
+
+      if (Number(amount) < 100) {
+        return res.status(400).json({
+          message: "Minimum funding amount is ₦100"
+        });
+      }
+
+      const result = db.exec(
+        `SELECT email FROM users WHERE id = ?`,
+        [user_id]
+      );
+
+      if (
+        result.length === 0 ||
+        result[0].values.length === 0
+      ) {
+        return res.status(404).json({
+          message: "User not found"
+        });
+      }
+
+      const email = result[0].values[0][0];
+
+      const response = await axios.post(
+        "https://api.paystack.co/transaction/initialize",
+        {
+          email: email,
+          amount: Math.round(Number(amount) * 100),
+          metadata: {
+            user_id: Number(user_id)
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+
+      const payment = response.data.data;
+
+      // Save pending transaction
+      db.run(
+        `INSERT INTO wallet_transactions
+        (user_id, type, amount, status, reference)
+        VALUES (?, ?, ?, ?, ?)`,
+        [
+          user_id,
+          "credit",
+          Number(amount),
+          "pending",
+          payment.reference
+        ]
+      );
+
+      fs.writeFileSync(
+        dbPath,
+        Buffer.from(db.export())
+      );
+
+      res.json({
+        status: "success",
+        authorization_url: payment.authorization_url,
+        reference: payment.reference
+      });
+
+    } catch (error) {
+      console.error(error.response?.data || error.message);
+
+      res.status(500).json({
+        message: "Unable to initialize payment"
+      });
+    }
+  });// WEBSITE
+  // =========================
+
   app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "../Index.html"));
+    res.sendFile(
+      path.join(__dirname, "../Index.html")
+    );
   });
 
-  app.get("/api", (req, res) => {   res.json({
+  // =========================
+  // TEST API
+  // =========================
+
+  app.get("/api", (req, res) => {
+    res.json({
       message: "Backend is working!",
       status: "success"
     });
   });
 
-  app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
-    console.log("Server running on http://localhost:3000");
-  });
+  // =========================
+  // START SERVER
+  // =========================
+
+  app.listen(
+    process.env.PORT || 3000,
+    "0.0.0.0",
+    () => {
+      console.log(
+        "Server running on http://localhost:3000"
+      );
+    }
+  );
 }
 
 startServer();
+
