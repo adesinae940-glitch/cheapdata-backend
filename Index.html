@@ -226,7 +226,9 @@ Sign Up
 <button onclick="showPage('dashboard')">
 Buy Data
 </button>
-
+<button onclick="showPage('wallet')">
+    Wallet
+</button>
 </nav>
 
 </header>
@@ -579,6 +581,33 @@ Buy Now
 </section>
 
 
+
+<!-- WALLET PAGE -->
+<section id="wallet" class="page">
+
+    <div class="card">
+        <h2>My Wallet</h2>
+
+        <h1 id="walletBalance">₦0.00</h1>
+
+        <p>Fund your wallet securely using Paystack.</p>
+
+        <input
+            type="number"
+            id="fundAmount"
+            placeholder="Enter amount"
+            min="100"
+        >
+
+        <button class="main-btn" onclick="fundWallet()">
+            Fund Wallet
+        </button>
+
+        <p id="walletMessage"></p>
+
+    </div>
+
+</section>
 <!-- ORDERS -->
 
 <section id="orders" class="page">
@@ -604,6 +633,98 @@ Affordable Data • Fast Service
 
 
 <script>
+async function loadWallet() {
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    const balanceElement =
+        document.getElementById("walletBalance");
+
+    if (!savedUser || !savedUser.id) {
+        balanceElement.innerText = "₦0.00";
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            "/api/wallet/" + savedUser.id
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.wallet) {
+            balanceElement.innerText =
+                "₦" + Number(result.wallet.balance).toFixed(2);
+        }
+
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+
+async function fundWallet() {
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    const amount = Number(
+        document.getElementById("fundAmount").value
+    );
+
+    const message =
+        document.getElementById("walletMessage");
+
+    if (!savedUser || !savedUser.id) {
+        message.innerText = "Please login first.";
+        return;
+    }
+
+    if (!amount || amount < 100) {
+        message.innerText =
+            "Enter an amount of at least ₦100.";
+        return;
+    }
+
+    message.innerText = "Initializing payment...";
+
+    try {
+        const response = await fetch(
+            "/api/wallet/fund",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    user_id: savedUser.id,
+                    amount: amount
+                })
+            }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            message.innerText =
+                result.message || "Unable to initialize payment.";
+            return;
+        }
+
+        if (result.authorization_url) {
+            window.location.href =
+                result.authorization_url;
+        } else {
+            message.innerText =
+                "Payment link was not received.";
+        }
+
+    } catch (error) {
+        console.error(error);
+        message.innerText =
+            "Unable to connect to server.";
+    }
 function showPage(page) {
     document.querySelectorAll(".page").forEach(function(section) {
         section.classList.remove("active");
@@ -613,6 +734,10 @@ function showPage(page) {
 
     if (selectedPage) {
         selectedPage.classList.add("active");
+
+        if (page === "wallet") {
+            loadWallet();
+        }
     }
 }
 
