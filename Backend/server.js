@@ -489,15 +489,128 @@ async function startServer() {
         message: "Unable to initialize payment"
       });
     }
-  });// WEBSITE
+  });
+  // =========================
+  // VERIFY PAYSTACK PAYMENT
+  // =========================
+
+  app.get("/api/wallet/verify/:reference", async (req, res) => {
+    try {
+      const reference = req.params.reference;
+
+      const transactionResult = db.exec(
+        `SELECT id, user_id, amount, status
+         FROM wallet_transactions
+         WHERE reference = ?`,
+        [reference]
+      );
+
+      if (
+        transactionResult.length === 0 ||
+        transactionResult[0].values.length === 0
+      ) {
+        return res.status(404).json({
+          message: "Transaction not found"
+        });
+      }
+
+      const transaction = transactionResult[0].values[0];
+
+      const transactionId = transaction[0];
+      const userId = transaction[1];
+      const expectedAmount = Number(transaction[2]);
+      const currentStatus = transaction[3];
+
+      // Prevent double credit
+      if (currentStatus === "success") {
+        return res.json({
+          status: "success",
+          message: "Transaction already verified"
+        });
+      }
+
+      // Verify payment with Paystack
+      const response = await axios.get(
+        `https://api.paystack.co/transaction/verify/${reference}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+          }
+        }
+      );
+
+      const payment = response.data.data;
+
+      if (payment.status !== "success") {
+        return res.status(400).json({
+          message: "Payment was not successful"
+        });
+      }
+
+      const paidAmount = Number(payment.amount) / 100;
+
+      if (paidAmount !== expectedAmount) {
+        return res.status(400).json({
+          message: "Payment amount does not match"
+        });
+      }
+
+      // Credit wallet
+      db.run(
+        `UPDATE users
+         SET wallet_balance = wallet_balance + ?
+         WHERE id = ?`,
+        [expectedAmount, userId]
+      );
+
+      // Mark transaction successful
+      db.run(
+        `UPDATE wallet_transactions
+         SET status = "success"
+         WHERE id = ?`,
+        [transactionId]
+      );
+
+      // Save database
+      fs.writeFileSync(
+        dbPath,
+        Buffer.from(db.export())
+      );
+
+      // Get updated balance
+      const userResult = db.exec(
+        `SELECT wallet_balance FROM users WHERE id = ?`,
+        [userId]
+      );
+
+      const newBalance = userResult[0].values[0][0];
+
+      res.json({
+        status: "success",
+        message: "Wallet funded successfully",
+        balance: newBalance
+      });
+
+    } catch (error) {
+      console.error(error.response?.data || error.message);
+
+      res.status(500).json({
+        message: "Unable to verify payment"
+      });
+    }
+  });
+
+  // =========================
+  
+// WEBSITE
   // =========================
 
   app.get("/", (req, res) => {
     res.sendFile(
-      path.join(__dirname, "../Index.html")
+     
+ path.join(__dirname, "../Index.html")
     );
   });
-
   // =========================
   // TEST API
   // =========================
