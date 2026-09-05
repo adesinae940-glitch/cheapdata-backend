@@ -226,9 +226,7 @@ Sign Up
 <button onclick="showPage('dashboard')">
 Buy Data
 </button>
-<button onclick="showPage('wallet')">
-    Wallet
-</button>
+
 </nav>
 
 </header>
@@ -581,33 +579,6 @@ Buy Now
 </section>
 
 
-
-<!-- WALLET PAGE -->
-<section id="wallet" class="page">
-
-    <div class="card">
-        <h2>My Wallet</h2>
-
-        <h1 id="walletBalance">₦0.00</h1>
-
-        <p>Fund your wallet securely using Paystack.</p>
-
-        <input
-            type="number"
-            id="fundAmount"
-            placeholder="Enter amount"
-            min="100"
-        >
-
-        <button class="main-btn" onclick="fundWallet()">
-            Fund Wallet
-        </button>
-
-        <p id="walletMessage"></p>
-
-    </div>
-
-</section>
 <!-- ORDERS -->
 
 <section id="orders" class="page">
@@ -633,98 +604,6 @@ Affordable Data • Fast Service
 
 
 <script>
-async function loadWallet() {
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
-    );
-
-    const balanceElement =
-        document.getElementById("walletBalance");
-
-    if (!savedUser || !savedUser.id) {
-        balanceElement.innerText = "₦0.00";
-        return;
-    }
-
-    try {
-        const response = await fetch(
-            "/api/wallet/" + savedUser.id
-        );
-
-        const result = await response.json();
-
-        if (response.ok && result.wallet) {
-            balanceElement.innerText =
-                "₦" + Number(result.wallet.balance).toFixed(2);
-        }
-
-    } catch (error) {
-        console.error(error);
-    }
-}
-
-
-async function fundWallet() {
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
-    );
-
-    const amount = Number(
-        document.getElementById("fundAmount").value
-    );
-
-    const message =
-        document.getElementById("walletMessage");
-
-    if (!savedUser || !savedUser.id) {
-        message.innerText = "Please login first.";
-        return;
-    }
-
-    if (!amount || amount < 100) {
-        message.innerText =
-            "Enter an amount of at least ₦100.";
-        return;
-    }
-
-    message.innerText = "Initializing payment...";
-
-    try {
-        const response = await fetch(
-            "/api/wallet/fund",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    user_id: savedUser.id,
-                    amount: amount
-                })
-            }
-        );
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            message.innerText =
-                result.message || "Unable to initialize payment.";
-            return;
-        }
-
-        if (result.authorization_url) {
-            window.location.href =
-                result.authorization_url;
-        } else {
-            message.innerText =
-                "Payment link was not received.";
-        }
-
-    } catch (error) {
-        console.error(error);
-        message.innerText =
-            "Unable to connect to server.";
-    }
 function showPage(page) {
     document.querySelectorAll(".page").forEach(function(section) {
         section.classList.remove("active");
@@ -734,10 +613,6 @@ function showPage(page) {
 
     if (selectedPage) {
         selectedPage.classList.add("active");
-
-        if (page === "wallet") {
-            loadWallet();
-        }
     }
 }
 
@@ -829,102 +704,9 @@ async function login(event) {
 }
 
 
-async function buyData(network, data, price) {
+function buyData(network, data, price) {
     if (localStorage.getItem("loggedIn") !== "true") {
         alert("Please login before buying data.");
-        showPage("login");
-        return;
-    }
-async function processOrder(network, bundle, price) {
-    const phone = document.getElementById("phone").value;
-
-    if (!/^[0-9]{11}$/.test(phone)) {
-        alert("Please enter a valid 11-digit phone number.");
-        return;
-    }
-
-    document.body.innerHTML = `
-        <div style="
-            height:100vh;
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            align-items:center;
-            font-family:Arial;
-            text-align:center;
-        ">
-            <h2>Processing Order...</h2>
-            <p>Please wait while we process your ${bundle} ${network} data.</p>
-        </div>
-    `;
-
-    try {
-        const response = await fetch(
-            "https://cheapdata-backend.onrender.com/api/order",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    network: network,
-                    bundle: bundle,
-                    price: price,
-                    phone: phone
-                })
-            }
-        );
-
-        const result = await response.json();
-
-        if (response.ok) {
-            document.body.innerHTML = `
-                <div style="
-                    height:100vh;
-                    display:flex;
-                    flex-direction:column;
-                    justify-content:center;
-                    align-items:center;
-                    font-family:Arial;
-                    text-align:center;
-                ">
-                    <h2>Order Successful ✅</h2>
-                    <p>${result.message || "Your order has been received."}</p>
-                    <p>Network: ${network}</p>
-                    <p>Bundle: ${bundle}</p>
-                    <p>Phone: ${phone}</p>
-                </div>
-            `;
-        } else {
-            throw new Error(result.message || "Order failed");
-        }
-
-    } catch (error) {
-        console.error(error);
-
-        document.body.innerHTML = `
-            <div style="
-                height:100vh;
-                display:flex;
-                flex-direction:column;
-                justify-content:center;
-                align-items:center;
-                font-family:Arial;
-                text-align:center;
-            ">
-                <h2>Order Failed ❌</h2>
-                <p>Unable to connect to the server.</p>
-                <p>Please try again.</p>
-            </div>
-        `;
-    }
-}
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
-    );
-
-    if (!savedUser || !savedUser.id) {
-        alert("Please login again.");
         showPage("login");
         return;
     }
@@ -937,105 +719,68 @@ async function processOrder(network, bundle, price) {
         return;
     }
 
-    try {
-        const response = await fetch("/api/orders", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                user_id: savedUser.id,
-                network: network,
-                data: data,
-                price: price,
-                phone: phone
-            })
-        });
+    const order = {
+        network: network,
+        data: data,
+        price: price,
+        phone: phone,
+        date: new Date().toLocaleString()
+    };
 
-        const result = await response.json();
+    let orders = JSON.parse(
+        localStorage.getItem("orders") || "[]"
+    );
 
-        if (!response.ok) {
-            alert(result.message || "Order failed.");
-            return;
-        }
+    orders.push(order);
 
-        alert(
-            "Order created successfully!\\n\\n" +
-            network + " " + data +
-            "\\nPrice: ₦" + price +
-            "\\nPhone: " + phone
-        );
+    localStorage.setItem(
+        "orders",
+        JSON.stringify(orders)
+    );
 
-        showOrders();
+    alert(
+        "Order created!\n\n" +
+        network + " " + data +
+        "\nPrice: ₦" + price +
+        "\n\nPayment gateway will be connected later."
+    );
 
-    } catch (error) {
-        console.error(error);
-        alert("Unable to connect to the server.");
-    }
+    showOrders();
 }
 
-async function showOrders() {
+
+function showOrders() {
     showPage("orders");
 
     const list = document.getElementById("orderList");
 
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
+    const orders = JSON.parse(
+        localStorage.getItem("orders") || "[]"
     );
 
-    if (!savedUser || !savedUser.id) {
-        list.innerHTML = "<p>Please login to view your orders.</p>";
+    if (orders.length === 0) {
+        list.innerHTML = "<p>You have no orders yet.</p>";
         return;
     }
 
-    list.innerHTML = "<p>Loading orders...</p>";
+    list.innerHTML = "";
 
-    try {
-        const response = await fetch(
-            "/api/orders/" + savedUser.id
-        );
+    orders.forEach(function(order) {
+        const div = document.createElement("div");
 
-        const result = await response.json();
+        div.className = "order";
 
-        if (!response.ok) {
-            list.innerHTML =
-                "<p>" +
-                (result.message || "Unable to load orders.") +
-                "</p>";
-            return;
-        }
+        div.innerHTML =
+            "<strong>" + order.network + "</strong><br>" +
+            "Data: " + order.data + "<br>" +
+            "Price: ₦" + order.price + "<br>" +
+            "Phone: " + order.phone + "<br>" +
+            "Date: " + order.date;
 
-        const orders = result.orders || [];
-
-        if (orders.length === 0) {
-            list.innerHTML = "<p>You have no orders yet.</p>";
-            return;
-        }
-
-        list.innerHTML = "";
-
-        orders.forEach(function(order) {
-            const div = document.createElement("div");
-
-            div.className = "order";
-
-            div.innerHTML =
-                "<strong>" + order.network + "</strong><br>" +
-                "Data: " + order.data + "<br>" +
-                "Price: ₦" + order.price + "<br>" +
-                "Phone: " + order.phone + "<br>" +
-                "Status: " + order.status + "<br>" +
-                "Date: " + order.date;
-
-            list.appendChild(div);
-        });
-
-    } catch (error) {
-        console.error(error);
-        list.innerHTML =
-            "<p>Unable to connect to the server.</p>";
-    }
+        list.appendChild(div);
+    });
 }
+
 
 window.onload = function() {
     const savedUser = JSON.parse(
@@ -1054,4 +799,4 @@ window.onload = function() {
 </script>
 
 </body>
-
+</html>
