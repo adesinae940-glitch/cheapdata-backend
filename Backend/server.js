@@ -514,14 +514,19 @@ console.log("FUND WALLET REQUEST:", req.body);
         authorization_url: payment.authorization_url,
         reference: payment.reference
       });
+} catch (error) {
+  console.error(
+    "PAYSTACK ERROR:",
+    error.response?.data || error.message
+  );
 
-    } catch (error) {
-      console.error(error.response?.data || error.message);
-
-      res.status(500).json({
-        message: "Unable to initialize payment"
-      });
-    }
+  res.status(500).json({
+    message:
+      error.response?.data?.message ||
+      error.message ||
+      "Unable to initialize payment"
+  });
+}
   });
   // =========================
   // VERIFY PAYSTACK PAYMENT
