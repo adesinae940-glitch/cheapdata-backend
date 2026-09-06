@@ -198,6 +198,61 @@ footer{
         padding:7px 10px;
     }
 }
+/* ORDER MODAL */
+.order-modal{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.55);
+    z-index:9999;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.order-modal.show{
+    display:flex;
+}
+
+.order-box{
+    position:relative;
+    background:white;
+    width:100%;
+    max-width:400px;
+    padding:30px;
+    border-radius:18px;
+    box-shadow:0 15px 40px rgba(0,0,0,0.25);
+    text-align:center;
+}
+
+.order-box h2{
+    color:#075e54;
+    margin-bottom:10px;
+}
+
+.order-box p{
+    margin:10px 0;
+}
+
+.order-box input{
+    width:100%;
+    padding:14px;
+    margin:15px 0;
+    border:1px solid #ddd;
+    border-radius:10px;
+    font-size:16px;
+}
+
+.close-order{
+    position:absolute;
+    top:10px;
+    right:15px;
+    border:none;
+    background:none;
+    font-size:28px;
+    cursor:pointer;
+    color:#666;
+}
 </style>
 </head>
 
@@ -619,6 +674,35 @@ Buy Now
 </section>
 
 
+<!-- ORDER MODAL -->
+<div id="orderModal" class="order-modal">
+
+    <div class="order-box">
+
+        <button class="close-order" onclick="closeOrder()">
+            ×
+        </button>
+
+        <h2>Buy Data</h2>
+
+        <p id="selectedPlan"></p>
+
+        <input
+            type="tel"
+            id="orderPhone"
+            placeholder="Enter 11-digit phone number"
+            maxlength="11"
+        >
+
+        <button class="main-btn" onclick="confirmOrder()">
+            Confirm Order
+        </button>
+
+        <p id="orderMessage"></p>
+
+    </div>
+
+</div>
 <footer>
 
 <p>
@@ -821,7 +905,7 @@ async function login(event) {
 
         alert("Login successful!");
 
-        showPage("dashboard");
+showPage("dashboard");
 
     } catch (error) {
         console.error(error);
@@ -829,137 +913,54 @@ async function login(event) {
     }
 }
 
+       async function showOrders() {
 
-async function buyData(network, data, price) {
-    if (localStorage.getItem("loggedIn") !== "true") {
-        alert("Please login before buying data.");
-        showPage("login");
-        return;
-    }
-
-
-
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
-    );
-
-    if (!savedUser || !savedUser.id) {
-        alert("Please login again.");
-        showPage("login");
-        return;
-    }
-
-    const phone = prompt(
-        "Enter the phone number to receive the data:"
-    );
-
-    if (!phone) {
-        return;
-    }
-
-    try {
-        const response = await fetch("/api/orders", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                user_id: savedUser.id,
-                network: network,
-                data: data,
-                price: price,
-                phone: phone
-            })
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            alert(result.message || "Order failed.");
-            return;
-        }
-
-        alert(
-            "Order created successfully!\\n\\n" +
-            network + " " + data +
-            "\\nPrice: ₦" + price +
-            "\\nPhone: " + phone
-        );
-
-        showOrders();
-
-    } catch (error) {
-        console.error(error);
-        alert("Unable to connect to the server.");
-    }
-}
-
-async function showOrders() {
     showPage("orders");
 
     const list = document.getElementById("orderList");
+const savedUser = JSON.parse(localStorage.getItem("user"));
 
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
-    );
+if (!savedUser) {
+    alert("Please login first.");
+    showPage("login");
+    return;
+}
 
-    if (!savedUser || !savedUser.id) {
-        list.innerHTML = "<p>Please login to view your orders.</p>";
+try {
+    const response = await fetch(`/orders/${savedUser.id}`);
+
+    const orders = await response.json();
+
+    list.innerHTML = "";
+
+    if (orders.length === 0) {
+        list.innerHTML = "<p>No orders yet.</p>";
         return;
     }
 
-    list.innerHTML = "<p>Loading orders...</p>";
+    orders.forEach(order => {
+        list.innerHTML += `
+            <div class="order-item">
+                <p><strong>Network:</strong> ${order.network}</p>
+                <p><strong>Bundle:</strong> ${order.bundle}</p>
+                <p><strong>Phone:</strong> ${order.phone}</p>
+                <p><strong>Amount:</strong> ₦${order.price}</p>
+                <p><strong>Status:</strong> ${order.status}</p>
+            </div>
+        `;
+    });
 
-    try {
-        const response = await fetch(
-            "/api/orders/" + savedUser.id
-        );
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            list.innerHTML =
-                "<p>" +
-                (result.message || "Unable to load orders.") +
-                "</p>";
-            return;
-        }
-
-        const orders = result.orders || [];
-
-        if (orders.length === 0) {
-            list.innerHTML = "<p>You have no orders yet.</p>";
-            return;
-        }
-
-        list.innerHTML = "";
-
-        orders.forEach(function(order) {
-            const div = document.createElement("div");
-
-            div.className = "order";
-
-            div.innerHTML =
-                "<strong>" + order.network + "</strong><br>" +
-                "Data: " + order.data + "<br>" +
-                "Price: ₦" + order.price + "<br>" +
-                "Phone: " + order.phone + "<br>" +
-                "Status: " + order.status + "<br>" +
-                "Date: " + order.date;
-
-            list.appendChild(div);
-        });
-
-    } catch (error) {
+          } catch (error) {
         console.error(error);
-        list.innerHTML =
-            "<p>Unable to connect to the server.</p>";
+        list.innerHTML = "<p>Unable to connect to the server.</p>";
     }
 }
 
+
 window.onload = function() {
+
     const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser")
+        localStorage.getItem("cheapDataUser") || "null"
     );
 
     if (savedUser) {
@@ -974,4 +975,4 @@ window.onload = function() {
 </script>
 
 </body>
-
+</html> 
