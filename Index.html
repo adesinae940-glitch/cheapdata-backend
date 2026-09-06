@@ -1026,9 +1026,9 @@ async function showOrders() {
         const response = await fetch(
             "/api/orders/" + savedUser.id
         );
-
-        const orders = await response.json();
-
+ 
+        const result = await response.json();
+        const orders = result.orders || [];
         list.innerHTML = "";
 
         if (!response.ok || !orders || orders.length === 0) {
@@ -1040,7 +1040,7 @@ async function showOrders() {
             list.innerHTML += `
                 <div class="order-item">
                     <p><strong>Network:</strong> ${order.network}</p>
-                    <p><strong>Bundle:</strong> ${order.bundle}</p>
+                    <p><strong>Bundle:</strong> ${order.data}</p>
                     <p><strong>Phone:</strong> ${order.phone}</p>
                     <p><strong>Amount:</strong> ₦${order.price}</p>
                     <p><strong>Status:</strong> ${order.status}</p>
