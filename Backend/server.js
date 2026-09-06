@@ -302,53 +302,85 @@ async function startServer() {
   // CREATE ORDER
   // =========================
 
-  app.post("/api/orders", (req, res) => {
-    try {
-      const {
-        user_id,
-        network,
-        data,
-        price,
-        phone
-      } = req.body;
+app.post("/api/orders", (req, res) => {
+  try {
+    const { user_id, network, data, price, phone } = req.body;
 
-      if (
-        !user_id ||
-        !network ||
-        !data ||
-        !price ||
-        !phone
-      ) {
-        return res.status(400).json({
-          message: "All order fields are required"
-        });
-      }
+    const userId = Number(user_id);
+    const orderPrice = Number(price);
 
-      db.run(
-        `INSERT INTO orders
-        (user_id, network, data, price, phone)
-        VALUES (?, ?, ?, ?, ?)`,
-        [user_id, network, data, price, phone]
-      );
-
-      fs.writeFileSync(
-        dbPath,
-        Buffer.from(db.export())
-      );
-
-      res.status(201).json({
-        message: "Order created successfully"
-      });
-
-    } catch (error) {
-      console.error(error);
-
-      res.status(500).json({
-        message: "Server error"
+    if (!userId || !network || !data || !orderPrice || !phone) {
+      return res.status(400).json({
+        message: "All order fields are required"
       });
     }
-  });
 
+    // Check user's wallet balance
+    const userResult = db.exec(
+      `SELECT wallet_balance FROM users WHERE id = ?`,
+      [userId]
+    );
+
+    if (
+      userResult.length === 0 ||
+      userResult[0].values.length === 0
+    ) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    const walletBalance = Number(userResult[0].values[0][0]);
+
+    if (walletBalance < orderPrice) {
+      return res.status(400).json({
+        message: "Insufficient wallet balance"
+      });
+    }
+
+    // Deduct from wallet
+    db.run(
+      `UPDATE users
+       SET wallet_balance = wallet_balance - ?
+       WHERE id = ?`,
+      [orderPrice, userId]
+    );
+
+    // Create order
+    db.run(
+      `INSERT INTO orders
+      (user_id, network, data, price, phone)
+      VALUES (?, ?, ?, ?, ?)`,
+      [userId, network, data, orderPrice, phone]
+    );
+
+    // Save database
+    fs.writeFileSync(
+      dbPath,
+      Buffer.from(db.export())
+    );
+
+    // Get new balance
+    const updatedResult = db.exec(
+      `SELECT wallet_balance FROM users WHERE id = ?`,
+      [userId]
+    );
+
+    const newBalance = Number(updatedResult[0].values[0][0]);
+
+    res.status(201).json({
+      message: "Order created successfully",
+      wallet_balance: newBalance
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Server error"
+    });
+  }
+});
   // =========================
   // GET ORDERS
   // =========================
