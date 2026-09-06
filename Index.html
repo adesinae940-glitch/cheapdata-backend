@@ -912,8 +912,99 @@ showPage("dashboard");
         alert("Unable to connect to the server.");
     }
 }
+let selectedNetwork = "";
+let selectedBundle = "";
+let selectedPrice = 0;
 
-       async function showOrders() {
+function buyData(network, bundle, price) {
+
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    if (!savedUser || !savedUser.id) {
+        alert("Please login first.");
+        showPage("login");
+        return;
+    }
+
+    selectedNetwork = network;
+    selectedBundle = bundle;
+    selectedPrice = price;
+
+    document.getElementById("selectedPlan").innerText =
+        network + " " + bundle + " - ₦" + price;
+
+    document.getElementById("orderPhone").value = "";
+    document.getElementById("orderMessage").innerText = "";
+
+    document.getElementById("orderModal").classList.add("show");
+}
+
+
+function closeOrder() {
+    document.getElementById("orderModal").classList.remove("show");
+}
+
+
+async function confirmOrder() {
+
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    const phone =
+        document.getElementById("orderPhone").value.trim();
+
+    const message =
+        document.getElementById("orderMessage");
+
+    if (!/^[0-9]{11}$/.test(phone)) {
+        message.innerText =
+            "Please enter a valid 11-digit phone number.";
+        return;
+    }
+
+    message.innerText = "Processing order...";
+
+    try {
+
+        const response = await fetch("/api/orders", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                user_id: savedUser.id,
+                network: selectedNetwork,
+                bundle: selectedBundle,
+                price: selectedPrice,
+                phone: phone
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            message.innerText =
+                result.message || "Order failed.";
+            return;
+        }
+
+        message.innerText =
+            "Order successful!";
+
+        setTimeout(function() {
+            closeOrder();
+            showOrders();
+        }, 1500);
+
+    } catch (error) {
+        console.error(error);
+        message.innerText =
+            "Unable to connect to server.";
+    }
+sync function showOrders() {
 
     showPage("orders");
 
@@ -955,6 +1046,20 @@ try {
         list.innerHTML = "<p>Unable to connect to the server.</p>";
     }
 }
+
+
+window.onload = function() {
+
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    if (savedUser) {
+        const welcome = document.getElementById("userWelcome");
+
+        if (welcome) {
+            welcome.innerText =
+                "Welcome, " + savedUser.name + "!";}
 
 
 window.onload = function() {
