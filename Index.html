@@ -1004,52 +1004,57 @@ async function confirmOrder() {
         message.innerText =
             "Unable to connect to server.";
     }
+}
+
 async function showOrders() {
 
     showPage("orders");
 
     const list = document.getElementById("orderList");
-const savedUser = JSON.parse(localStorage.getItem("user"));
 
-if (!savedUser) {
-    alert("Please login first.");
-    showPage("login");
-    return;
-}
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
 
-try {
-    const response = await fetch(`/orders/${savedUser.id}`);
-
-    const orders = await response.json();
-
-    list.innerHTML = "";
-
-    if (orders.length === 0) {
-        list.innerHTML = "<p>No orders yet.</p>";
+    if (!savedUser || !savedUser.id) {
+        alert("Please login first.");
+        showPage("login");
         return;
     }
 
-    orders.forEach(order => {
-        list.innerHTML += `
-            <div class="order-item">
-                <p><strong>Network:</strong> ${order.network}</p>
-                <p><strong>Bundle:</strong> ${order.bundle}</p>
-                <p><strong>Phone:</strong> ${order.phone}</p>
-                <p><strong>Amount:</strong> ₦${order.price}</p>
-                <p><strong>Status:</strong> ${order.status}</p>
-            </div>
-        `;
-    });
+    try {
+        const response = await fetch(
+            "/api/orders/" + savedUser.id
+        );
 
-          } catch (error) {
+        const orders = await response.json();
+
+        list.innerHTML = "";
+
+        if (!response.ok || !orders || orders.length === 0) {
+            list.innerHTML = "<p>No orders yet.</p>";
+            return;
+        }
+
+        orders.forEach(order => {
+            list.innerHTML += `
+                <div class="order-item">
+                    <p><strong>Network:</strong> ${order.network}</p>
+                    <p><strong>Bundle:</strong> ${order.bundle}</p>
+                    <p><strong>Phone:</strong> ${order.phone}</p>
+                    <p><strong>Amount:</strong> ₦${order.price}</p>
+                    <p><strong>Status:</strong> ${order.status}</p>
+                </div>
+            `;
+        });
+
+    } catch (error) {
         console.error(error);
         list.innerHTML = "<p>Unable to connect to the server.</p>";
     }
 }
 
-
 window.onload = function() {
-
     const savedUser = JSON.parse(
         localStorage.getItem("cheapDataUser") || "null"
     );
@@ -1058,22 +1063,7 @@ window.onload = function() {
         const welcome = document.getElementById("userWelcome");
 
         if (welcome) {
-            welcome.innerText =
-                "Welcome, " + savedUser.name + "!";}
-
-
-window.onload = function() {
-
-    const savedUser = JSON.parse(
-        localStorage.getItem("cheapDataUser") || "null"
-    );
-
-    if (savedUser) {
-        const welcome = document.getElementById("userWelcome");
-
-        if (welcome) {
-            welcome.innerText =
-                "Welcome, " + savedUser.name + "!";
+            welcome.innerText = "Welcome, " + savedUser.name + "!";
         }
     }
 };
