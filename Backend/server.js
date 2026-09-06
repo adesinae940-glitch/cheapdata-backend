@@ -439,7 +439,8 @@ app.post("/api/orders", (req, res) => {
   // =========================
 
   app.post("/api/wallet/fund", async (req, res) => {
-    try {
+console.log("FUND WALLET REQUEST:", req.body);  
+  try {
       const { user_id, amount } = req.body;
 
       if (!user_id || !amount) {
