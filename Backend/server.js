@@ -5,6 +5,8 @@ const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const axios = require("axios");
 const app = express();
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+
 
 app.use(express.json());
 
