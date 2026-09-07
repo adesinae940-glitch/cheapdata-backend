@@ -484,7 +484,7 @@ console.log("FUND WALLET REQUEST:", req.body);
         },
         {
           headers: {
-            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
             "Content-Type": "application/json"
           }
         }
@@ -574,7 +574,7 @@ console.log("FUND WALLET REQUEST:", req.body);
         `https://api.paystack.co/transaction/verify/${reference}`,
         {
           headers: {
-            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`
           }
         }
       );
