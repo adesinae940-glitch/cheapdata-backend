@@ -149,6 +149,71 @@ app.post("/api/wallet/fund", async (req, res) => {
     });
   }
 });
+app.get("/api/payment/callback", async (req, res) => {
+  const { reference } = req.query;
+
+  if (!reference) {
+    return res.status(400).send("Payment reference missing");
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+        }
+      }
+    );
+
+    const payment = response.data.data;
+
+    if (payment.status !== "success") {
+      return res.status(400).send("Payment was not successful");
+    }
+
+    const user = users.find(u => u.email === payment.customer.email);
+
+    if (!user) {
+      return res.status(404).send("User not found");
+    }
+
+    const alreadyCredited = user.transactions?.find(
+      t => t.reference === reference
+    );
+
+    if (alreadyCredited) {
+      return res.send("Payment already credited");
+    }
+
+    const amount = payment.amount / 100;
+
+    user.wallet += amount;
+
+    if (!user.transactions) {
+      user.transactions = [];
+    }
+
+    user.transactions.push({
+      type: "wallet_funding",
+      amount,
+      reference,
+      status: "success",
+      date: new Date().toISOString()
+    });
+
+    saveUsers();
+
+    res.send("Payment successful. Wallet credited.");
+  } catch (error) {
+    console.error(
+      "Payment verification error:",
+      error.response?.data || error.message
+    );
+
+    res.status(500).send("Unable to verify payment");
+  }
+});
 app.listen(PORT, "0.0.0.0", () => {
   console.log("CheapData server running on port " + PORT);
 });
