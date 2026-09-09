@@ -73,16 +73,18 @@ app.post("/api/login", async (req, res) => {
       message: "Invalid email or password"
     });
   }
-
-  res.json({
+res.json({
     status: "success",
     message: "Login successful",
-    userId: user.id,
-    name: user.name,
-    wallet: user.wallet
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      wallet: user.wallet
+    }
   });
 });
-
 app.get("/api/wallet/:userId", (req, res) => {
   const user = users.find(u => u.id == req.params.userId);
 
