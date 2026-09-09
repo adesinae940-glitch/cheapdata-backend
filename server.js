@@ -98,7 +98,57 @@ app.get("/api/wallet/:userId", (req, res) => {
     wallet: user.wallet
   });
 });
+const axios = require("axios");
 
+app.post("/api/wallet/fund", async (req, res) => {
+  const { user_id, amount } = req.body;
+
+  const user = users.find(u => u.id == user_id);
+
+  if (!user) {
+    return res.status(404).json({
+      status: "error",
+      message: "User not found"
+    });
+  }
+
+  if (!amount || amount < 100) {
+    return res.status(400).json({
+      status: "error",
+      message: "Minimum funding amount is ₦100"
+    });
+  }
+
+  try {
+    const response = await axios.post(
+      "https://api.paystack.co/transaction/initialize",
+      {
+        email: user.email,
+        amount: Math.round(amount * 100),
+        callback_url: "https://cheapdata-backend.onrender.com/api/payment/callback"
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({
+      status: "success",
+      authorization_url: response.data.data.authorization_url,
+      reference: response.data.data.reference
+    });
+  } catch (error) {
+    console.error("Paystack error:", error.response?.data || error.message);
+
+    res.status(500).json({
+      status: "error",
+      message: "Unable to initialize payment"
+    });
+  }
+});
 app.listen(PORT, "0.0.0.0", () => {
   console.log("CheapData server running on port " + PORT);
 });
