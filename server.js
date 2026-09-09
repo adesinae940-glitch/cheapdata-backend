@@ -6,8 +6,8 @@ const app = express();
 const PORT = 3000;
 const DATA_FILE = "users.json";
 
+app.use("/api/paystack/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
-
 let users = fs.existsSync(DATA_FILE)
   ? JSON.parse(fs.readFileSync(DATA_FILE))
   : [];
