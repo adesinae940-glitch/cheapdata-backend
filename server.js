@@ -1,0 +1,104 @@
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const fs = require("fs");
+
+const app = express();
+const PORT = 3000;
+const DATA_FILE = "users.json";
+
+app.use(express.json());
+
+let users = fs.existsSync(DATA_FILE)
+  ? JSON.parse(fs.readFileSync(DATA_FILE))
+  : [];
+
+function saveUsers() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2));
+}
+
+app.get("/api", (req, res) => {
+  res.json({
+    status: "success",
+    message: "CheapData backend is working!"
+  });
+});
+
+app.post("/api/signup", async (req, res) => {
+  const { name, email, phone, password } = req.body;
+
+  if (!name || !email || !phone || !password) {
+    return res.status(400).json({
+      status: "error",
+      message: "All fields are required"
+    });
+  }
+
+  if (users.find(u => u.email === email)) {
+    return res.status(400).json({
+      status: "error",
+      message: "Email already registered"
+    });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = {
+    id: users.length + 1,
+    name,
+    email,
+    phone,
+    password: hashedPassword,
+    wallet: 0,
+    transactions: []
+  };
+
+  users.push(user);
+  saveUsers();
+
+  res.json({
+    status: "success",
+    message: "Registration successful",
+    userId: user.id
+  });
+});
+
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = users.find(u => u.email === email);
+
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({
+      status: "error",
+      message: "Invalid email or password"
+    });
+  }
+
+  res.json({
+    status: "success",
+    message: "Login successful",
+    userId: user.id,
+    name: user.name,
+    wallet: user.wallet
+  });
+});
+
+app.get("/api/wallet/:userId", (req, res) => {
+  const user = users.find(u => u.id == req.params.userId);
+
+  if (!user) {
+    return res.status(404).json({
+      status: "error",
+      message: "User not found"
+    });
+  }
+
+  res.json({
+    status: "success",
+    wallet: user.wallet
+  });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("CheapData server running on port " + PORT);
+});
