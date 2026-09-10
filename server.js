@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const fs = require("fs");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const DATA_FILE = "users.json";
 
 app.use("/api/paystack/webhook", express.raw({ type: "application/json" }));
