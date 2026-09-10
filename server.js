@@ -219,66 +219,82 @@ app.get("/api/payment/callback", async (req, res) => {
 const crypto = require("crypto");
 
 app.post("/api/paystack/webhook", (req, res) => {
-  const hash = crypto
-    .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
-    .update(req.body)
-    .digest("hex");
+  try {
+    const hash = crypto
+      .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
+      .update(req.body)
+      .digest("hex");
 
-  if (hash !== req.headers["x-paystack-signature"]) {
-    return res.status(401).send("Invalid signature");
+    if (hash !== req.headers["x-paystack-signature"]) {
+      return res.status(401).send("Invalid signature");
+    }
+
+    const event = JSON.parse(req.body.toString());
+
+    if (event.event !== "charge.success") {
+      return res.sendStatus(200);
+    }
+
+    const payment = event.data;
+
+    if (payment.status !== "success" || payment.currency !== "NGN") {
+      return res.sendStatus(200);
+    }
+
+    const reference = payment.reference;
+    const amount = payment.amount / 100;
+    const email = payment.customer.email;
+
+    const user = db
+      .prepare("SELECT id, email, wallet_balance FROM users WHERE email = ?")
+      .get(email);
+
+    if (!user) {
+      console.log("User not found:", email);
+      return res.sendStatus(200);
+    }
+
+    const existingTransaction = db
+      .prepare("SELECT id FROM transactions WHERE reference = ?")
+      .get(reference);
+
+    if (existingTransaction) {
+      console.log("Payment already credited:", reference);
+      return res.sendStatus(200);
+    }
+
+    const creditWallet = db.transaction(() => {
+      db.prepare(`
+        UPDATE users
+        SET wallet_balance = wallet_balance + ?
+        WHERE id = ?
+      `).run(amount, user.id);
+
+      db.prepare(`
+        INSERT INTO transactions
+        (user_id, type, amount, status, reference)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        user.id,
+        "wallet_funding",
+        amount,
+        "success",
+        reference
+      );
+    });
+
+    creditWallet();
+
+    console.log(`Wallet credited: ${email} +₦${amount}`);
+
+    res.sendStatus(200);
+
+  } catch (error) {
+    console.error("Webhook error:", error);
+    res.sendStatus(500);
   }
-
-  const event = JSON.parse(req.body.toString());
-
-  if (event.event !== "charge.success") {
-    return res.sendStatus(200);
-   }
-  const payment = event.data;
-
-  if (payment.status !== "success" || payment.currency !== "NGN") {
-    return res.sendStatus(200);
-  }
-
-  const user = users.find(
-    u => u.email === payment.customer.email
-  );
-
-  if (!user) {
-    return res.sendStatus(200);
-  }
-
-  if (!user.transactions) {
-    user.transactions = [];
-  }
-
-  const alreadyCredited = user.transactions.find(
-    t => t.reference === payment.reference
-  );
-
-  if (alreadyCredited) {
-    return res.sendStatus(200);
-  }
-
-  const amount = payment.amount / 100;
-
-  user.wallet += amount;
-
-  user.transactions.push({
-    type: "wallet_funding",
-    amount: amount,
-    reference: payment.reference,
-    status: "success",
-    date: new Date().toISOString()
-  });
-
-  saveUsers();
-
-  console.log(
-    `Wallet credited: ${user.email} +₦${amount}`
-  );
-
-  res.sendStatus(200);
 });
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log("CheapData server running on port " + PORT);
 });
