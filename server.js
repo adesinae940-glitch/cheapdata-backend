@@ -217,7 +217,6 @@ app.get("/api/payment/callback", async (req, res) => {
   }
 });
 const crypto = require("crypto");
-
 app.post("/api/paystack/webhook", (req, res) => {
   try {
     const hash = crypto
@@ -245,45 +244,37 @@ app.post("/api/paystack/webhook", (req, res) => {
     const amount = payment.amount / 100;
     const email = payment.customer.email;
 
-    const user = db
-      .prepare("SELECT id, email, wallet_balance FROM users WHERE email = ?")
-      .get(email);
+    const user = users.find(u => u.email === email);
 
     if (!user) {
       console.log("User not found:", email);
       return res.sendStatus(200);
     }
 
-    const existingTransaction = db
-      .prepare("SELECT id FROM transactions WHERE reference = ?")
-      .get(reference);
+    if (!user.transactions) {
+      user.transactions = [];
+    }
 
-    if (existingTransaction) {
+    const alreadyCredited = user.transactions.find(
+      t => t.reference === reference
+    );
+
+    if (alreadyCredited) {
       console.log("Payment already credited:", reference);
       return res.sendStatus(200);
     }
 
-    const creditWallet = db.transaction(() => {
-      db.prepare(`
-        UPDATE users
-        SET wallet_balance = wallet_balance + ?
-        WHERE id = ?
-      `).run(amount, user.id);
+    user.wallet += amount;
 
-      db.prepare(`
-        INSERT INTO transactions
-        (user_id, type, amount, status, reference)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(
-        user.id,
-        "wallet_funding",
-        amount,
-        "success",
-        reference
-      );
+    user.transactions.push({
+      type: "wallet_funding",
+      amount: amount,
+      reference: reference,
+      status: "success",
+      date: new Date().toISOString()
     });
 
-    creditWallet();
+    saveUsers();
 
     console.log(`Wallet credited: ${email} +₦${amount}`);
 
@@ -298,3 +289,4 @@ app.post("/api/paystack/webhook", (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log("CheapData server running on port " + PORT);
 });
+
