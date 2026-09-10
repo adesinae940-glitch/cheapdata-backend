@@ -285,7 +285,62 @@ app.post("/api/paystack/webhook", (req, res) => {
     res.sendStatus(500);
   }
 });
+app.post("/api/orders", (req, res) => {
+  const { user_id, network, data, price, phone } = req.body;
 
+  if (!user_id || !network || !data || !price || !phone) {
+    return res.status(400).json({
+      status: "error",
+      message: "All order fields are required"
+    });
+  }
+
+  const user = users.find(u => u.id == user_id);
+
+  if (!user) {
+    return res.status(404).json({
+      status: "error",
+      message: "User not found"
+    });
+  }
+
+  if (user.wallet < price) {
+    return res.status(400).json({
+      status: "error",
+      message: "Insufficient wallet balance"
+    });
+  }
+
+  user.wallet -= Number(price);
+
+  if (!user.transactions) {
+    user.transactions = [];
+  }
+
+  user.transactions.push({
+    type: "data_purchase",
+    network,
+    data,
+    phone,
+    amount: Number(price),
+    status: "pending",
+    date: new Date().toISOString()
+  });
+
+  saveUsers();
+
+  res.json({
+    status: "success",
+    message: "Order successful",
+    order: {
+      network,
+      data,
+      phone,
+      price: Number(price),
+      status: "pending"
+    }
+  });
+});
 app.listen(PORT, "0.0.0.0", () => {
   console.log("CheapData server running on port " + PORT);
 });
