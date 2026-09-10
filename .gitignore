@@ -1,3 +1,5 @@
+node_modules/
+users.json
 *.db
 *.backup*
 *.before-*
@@ -6,5 +8,4 @@
 *.jynode_modules/
 .env
 *.tar.gz
-*.backup
 *.before-orders
