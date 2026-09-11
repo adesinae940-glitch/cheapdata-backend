@@ -7,6 +7,11 @@ const app = express();
 app.use(cors());
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = "users.json";
+const path = require("path");
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "Index.html"));
+});
 
 app.use("/api/paystack/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
