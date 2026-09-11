@@ -737,9 +737,9 @@ async function loadWallet() {
 
         const result = await response.json();
 
-        if (response.ok && result.wallet) {
+if (response.ok) {
             balanceElement.innerText =
-                "₦" + Number(result.wallet.balance).toFixed(2);
+                "₦" + Number(result.wallet || 0).toFixed(2);
         }
 
     } catch (error) {
