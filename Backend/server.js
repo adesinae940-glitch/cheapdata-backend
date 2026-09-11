@@ -348,6 +348,33 @@ app.post("/api/orders", (req, res) => {
     }
   });
 });
+app.get("/api/orders/:userId", (req, res) => {
+  const user = users.find(u => u.id == req.params.userId);
+
+  if (!user) {
+    return res.status(404).json({
+      status: "error",
+      message: "User not found"
+    });
+  }
+
+  const orders = (user.transactions || [])
+    .filter(t => t.type === "data_purchase")
+    .map(t => ({
+      network: t.network,
+      data: t.data,
+      phone: t.phone,
+      price: t.amount,
+      status: t.status,
+      date: t.date
+    }));
+
+  res.json({
+    status: "success",
+    orders
+  });
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log("CheapData server running on port " + PORT);
 });
