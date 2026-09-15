@@ -274,7 +274,6 @@ Home
 Login
 </button>
 
-<button onclick="showPage('signup')">
 Sign Up
 </button>
 
@@ -284,6 +283,11 @@ Buy Data
 <button onclick="showPage('wallet')">
     Wallet
 </button>
+
+<button id="adminButton" onclick="showPage('adminDashboard')" style="display:none;">
+    Admin
+</button>
+
 </nav>
 
 </header>
@@ -899,7 +903,16 @@ async function login(event) {
 
         localStorage.setItem("loggedIn", "true");
         localStorage.setItem("cheapDataUser", JSON.stringify(result.user));
+if (result.adminToken) {
+    const adminUser = {
+        ...result.user,
+        adminToken: result.adminToken
+    };
 
+    localStorage.setItem("cheapDataUser", JSON.stringify(adminUser));
+
+    document.getElementById("adminButton").style.display = "inline-block";
+}
         document.getElementById("userWelcome").innerText =
             "Welcome, " + result.user.name + "!";
 
