@@ -872,7 +872,49 @@ res.json({
     }
   });
   // =========================
-  // WEBSITE
+  app.put("/api/admin/orders/:id/status", requireAdmin, (req, res) => {
+    try {
+      const orderId = Number(req.params.id);
+      const { status } = req.body;
+
+      const allowedStatuses = [
+        "pending",
+        "processing",
+        "successful",
+        "failed"
+      ];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid order status"
+        });
+      }
+
+      db.run(
+        `UPDATE orders
+         SET status = ?
+         WHERE id = ?`,
+        [status, orderId]
+      );
+
+      saveDatabase();
+
+      res.json({
+        status: "success",
+        message: "Order status updated"
+      });
+
+    } catch (error) {
+      console.error("Admin status update error:", error);
+
+      res.status(500).json({
+        status: "error",
+        message: "Server error"
+      });
+    }
+  });  
+// WEBSITE
   // =========================
 
   app.get("/", (req, res) => {
