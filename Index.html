@@ -1135,7 +1135,7 @@ async function loadAdminOrders() {
                 Data: ${order.data}<br>
                 Price: ₦${Number(order.price).toLocaleString()}<br>
                 Phone: ${order.phone}<br>
-                Status: ${order.status}<br>
+                Status: <select onchange="updateOrderStatus(${order.id}, this.value)"><option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option><option value="processing" ${order.status === "processing" ? "selected" : ""}>Processing</option><option value="successful" ${order.status === "successful" ? "selected" : ""}>Successful</option><option value="failed" ${order.status === "failed" ? "selected" : ""}>Failed</option></select><br>
                 Date: ${order.date}
             </div>
         `).join("");
@@ -1145,7 +1145,36 @@ async function loadAdminOrders() {
         container.innerHTML = "<p>Unable to load orders.</p>";
     }
 }
+async function updateOrderStatus(orderId, newStatus) {
+    const savedUser = JSON.parse(localStorage.getItem("cheapDataUser"));
+    if (!savedUser || !savedUser.adminToken) {
+        alert("Admin access required.");
+        return;
+    }
 
+    try {
+        const response = await fetch("https://cheapdata-backend.onrender.com/api/admin/orders/" + orderId + "/status", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + savedUser.adminToken
+            },
+            body: JSON.stringify({ status: newStatus })
+        });
+
+        const result = await response.json();
+
+        if (result.status === "success") {
+            alert("Order status updated successfully.");
+            loadAdminOrders();
+        } else {
+            alert(result.message || "Failed to update order status.");
+        }
+    } catch (error) {
+        console.error(error);
+        alert("Unable to update order status.");
+    }
+}
 loadAdminOrders();
 </script>
 </body>
