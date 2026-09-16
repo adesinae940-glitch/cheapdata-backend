@@ -360,21 +360,9 @@ res.json({
       }
 
       const user = result[0].values[0];
-
 res.json({
   status: "success",
-  message: "Login successful",
-  user: {
-    id: user[0],
-    name: user[1],
-    email: user[2],
-    phone: user[3],
-    wallet: user[5],
-    is_admin: user[6]
-  },
-  adminToken: Number(user[6]) === 1
-    ? createAdminToken(user[0])
-    : null
+  wallet: user[2]
 });
     } catch (error) {
       console.error("Wallet error:", error);
