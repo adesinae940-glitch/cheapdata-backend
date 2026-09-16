@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 const dbPath = path.join(__dirname, "cheapdata.db");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const ERICODATA_API_KEY = process.env.ERICODATA_API_KEY;
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
 
 function createAdminToken(userId) {
@@ -921,6 +922,11 @@ callback_url: "https://cheapdata-backend.onrender.com/",
       message: "CheapData backend is working!"
     });
   });
+app.get("/api/ericodata-test", (req, res) => {
+  res.json({
+    ericodata_key_configured: !!ERICODATA_API_KEY
+  });
+});
 
   // =========================
   // START SERVER
