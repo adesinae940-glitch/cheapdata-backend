@@ -1195,8 +1195,9 @@ async function verifyWalletPayment() {
         const result = await response.json();
 
         if (result.status === "success") {
-            alert("Wallet funded successfully!");
-            window.location.href = window.location.pathname;
+alert("Wallet funded successfully!");
+await loadWallet();
+window.history.replaceState({}, document.title, window.location.pathname);
         } else {
             alert(result.message || "Payment verification failed.");
         }
