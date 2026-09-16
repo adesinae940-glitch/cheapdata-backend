@@ -260,7 +260,18 @@ console.log("LOGIN DEBUG:", {
 
 res.json({
   status: "success",
-  wallet: user[2]
+  message: "Login successful",
+  user: {
+    id: user[0],
+    name: user[1],
+    email: user[2],
+    phone: user[3],
+    wallet: user[5],
+    is_admin: user[6]
+  },
+  adminToken: Number(user[6]) === 1
+    ? createAdminToken(user[0])
+    : null
 });
     } catch (error) {
       console.error("Login error:", error);
