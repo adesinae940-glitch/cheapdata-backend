@@ -500,7 +500,7 @@ res.json({
         {
           email,
           amount: Math.round(Number(amount) * 100),
-callback_url: "https://cheapdata-backend.onrender.com/api/wallet/verify",
+callback_url: "https://cheapdata-backend.onrender.com/",
           metadata: {
             user_id: Number(user_id)
           }

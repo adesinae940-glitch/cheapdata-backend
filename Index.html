@@ -1177,5 +1177,37 @@ async function updateOrderStatus(orderId, newStatus) {
 }
 loadAdminOrders();
 </script>
+<script>
+async function verifyWalletPayment() {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference");
+
+    if (!reference) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            "https://cheapdata-backend.onrender.com/api/wallet/verify/" +
+            encodeURIComponent(reference)
+        );
+
+        const result = await response.json();
+
+        if (result.status === "success") {
+            alert("Wallet funded successfully!");
+            window.location.href = window.location.pathname;
+        } else {
+            alert(result.message || "Payment verification failed.");
+        }
+
+    } catch (error) {
+        console.error(error);
+        alert("Unable to verify payment.");
+    }
+}
+
+verifyWalletPayment();
+</script>
 </body>
 </html> 
