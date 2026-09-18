@@ -966,7 +966,40 @@ app.get("/api/ericodata-plans-test", async (req, res) => {
     });
   }
 });
-  app.listen(PORT, "0.0.0.0", () => {
+  
+// =========================
+// ERICODATA ORDER FORMAT TEST
+// =========================
+app.post("/api/ericodata-order-test", async (req, res) => {
+  try {
+    const response = await axios.post(
+      "https://ericodata.com.ng/wp-json/ericodata/v1/order",
+      {},
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent-Key": ERICODATA_API_KEY
+        }
+      }
+    );
+
+    res.json({
+      status: "success",
+      response: response.data
+    });
+
+  } catch (error) {
+    console.error(
+      "Ericodata order test:",
+      error.response?.data || error.message
+    );
+    res.status(error.response?.status || 500).json({
+      status: "error",
+      message: error.response?.data || error.message
+    });
+  }
+});
+app.listen(PORT, "0.0.0.0", () => {
     console.log(
       "CheapData server running on port " + PORT
     );
