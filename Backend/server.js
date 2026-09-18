@@ -998,11 +998,43 @@ const response = await axios.post(
     });
   }
 });
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(
-      "CheapData server running on port " + PORT
+// =========================
+// ERICODATA BALANCE TEST
+// =========================
+app.get("/api/ericodata-balance-test", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://ericodata.com.ng/wp-json/ericodata/v1/balance",
+      {
+        headers: {
+          "X-Agent-Key": ERICODATA_API_KEY
+        }
+      }
     );
-  });
+
+    res.json({
+      status: "success",
+      balance: response.data
+    });
+
+  } catch (error) {
+    console.error(
+      "Ericodata balance error:",
+      error.response?.data || error.message
+    );
+
+    res.status(error.response?.status || 500).json({
+      status: "error",
+      message: error.response?.data || error.message
+    });
+  }
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(
+    "CheapData server running on port " + PORT
+  );
+});
 }
 
 function saveDatabase() {
