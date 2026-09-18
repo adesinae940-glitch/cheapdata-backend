@@ -966,8 +966,40 @@ app.get("/api/ericodata-plans-test", async (req, res) => {
     });
   }
 });
-  
+// =========================  
 // =========================
+// ERICODATA TRANSACTIONS TEST
+// =========================
+app.get("/api/ericodata-transactions-test", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://ericodata.com.ng/wp-json/ericodata/v1/transactions",
+      {
+        headers: {
+          "X-Agent-Key": ERICODATA_API_KEY
+        }
+      }
+    );
+
+    res.json({
+      status: "success",
+      transactions: response.data
+    });
+
+  } catch (error) {
+    console.error(
+      "Ericodata transactions error:",
+      error.response?.data || error.message
+    );
+
+    res.status(error.response?.status || 500).json({
+      status: "error",
+      message:
+        error.response?.data ||
+        "Unable to fetch Ericodata transactions"
+    });
+  }
+});
 // ERICODATA ORDER FORMAT TEST
 // =========================
 app.post("/api/ericodata-order-test", async (req, res) => {
