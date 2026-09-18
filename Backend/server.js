@@ -972,17 +972,16 @@ app.get("/api/ericodata-plans-test", async (req, res) => {
 // =========================
 app.post("/api/ericodata-order-test", async (req, res) => {
   try {
-    const response = await axios.post(
-      "https://ericodata.com.ng/wp-json/ericodata/v1/order",
-      {},
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-Agent-Key": ERICODATA_API_KEY
-        }
-      }
-    );
-
+const response = await axios.post(
+  "https://ericodata.com.ng/wp-json/ericodata/v1/order",
+  req.body,
+  {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Agent-Key": ERICODATA_API_KEY
+    }
+  }
+);
     res.json({
       status: "success",
       response: response.data
