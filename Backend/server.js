@@ -966,6 +966,43 @@ app.get("/api/ericodata-plans-test", async (req, res) => {
     });
   }
 });
+// =========================
+// ERICODATA NETWORK PLANS TEST
+// =========================
+app.get("/api/ericodata-network-plans-test", async (req, res) => {
+  try {
+    const network = req.query.network;
+
+    const response = await axios.get(
+      "https://ericodata.com.ng/wp-json/ericodata/v1/plans",
+      {
+        params: network ? { network } : {},
+        headers: {
+          "X-Agent-Key": ERICODATA_API_KEY
+        }
+      }
+    );
+
+    res.json({
+      status: "success",
+      network: network || "all",
+      plans: response.data
+    });
+
+  } catch (error) {
+    console.error(
+      "Ericodata network plans error:",
+      error.response?.data || error.message
+    );
+
+    res.status(error.response?.status || 500).json({
+      status: "error",
+      message:
+        error.response?.data ||
+        "Unable to fetch Ericodata plans"
+    });
+  }
+});
 // =========================  
 // =========================
 // ERICODATA TRANSACTIONS TEST
