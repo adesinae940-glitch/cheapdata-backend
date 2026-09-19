@@ -19,6 +19,29 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const ERICODATA_API_KEY = process.env.ERICODATA_API_KEY;
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
 
+
+// =========================
+// ERICODATA PLAN MAPPING
+// =========================
+const ERICODATA_PLANS = {
+  MTN: {
+    "500MB": 528,
+    "1GB": 861,
+    "2GB": 473
+  },
+  Airtel: {
+    "600MB": 478,
+    "1GB": 625,
+    "2GB": 617
+  },
+  Glo: {
+    "500MB": 810,
+    "1GB": 811,
+    "2.5GB": 493
+  }
+};
+
+
 function createAdminToken(userId) {
   const payload = `${userId}.${Date.now()}`;
 
@@ -668,26 +691,99 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // CREATE ORDER
   // =========================
 
-  app.post("/api/orders", (req, res) => {
+  app.post("/api/orders", async (req, res) => {
     try {
       const {
         user_id,
         network,
         data,
-        price,
         phone
       } = req.body;
 
-      if (
-        !user_id ||
-        !network ||
-        !data ||
-        !price ||
-        !phone
-      ) {
+      if (!user_id || !network || !data || !phone) {
         return res.status(400).json({
           status: "error",
           message: "All order fields are required"
+        });
+      }
+
+      const cleanPhone = String(phone).trim();
+
+      if (!/^\d{11}$/.test(cleanPhone)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Phone number must be exactly 11 digits"
+        });
+      }
+
+      const productKey =
+        `${String(network).trim().toLowerCase()}|${String(data).trim().toUpperCase()}`;
+
+      const PRODUCTS = {
+        "mtn|500MB": {
+          network: "mtn",
+          data: "500MB",
+          price: 350,
+          plan_id: 528
+        },
+        "mtn|1GB": {
+          network: "mtn",
+          data: "1GB",
+          price: 500,
+          plan_id: 861
+        },
+        "mtn|2GB": {
+          network: "mtn",
+          data: "2GB",
+          price: 900,
+          plan_id: 473
+        },
+
+        "airtel|600MB": {
+          network: "airtel",
+          data: "600MB",
+          price: 300,
+          plan_id: 478
+        },
+        "airtel|1GB": {
+          network: "airtel",
+          data: "1GB",
+          price: 450,
+          plan_id: 625
+        },
+        "airtel|2GB": {
+          network: "airtel",
+          data: "2GB",
+          price: 700,
+          plan_id: 617
+        },
+
+        "glo|500MB": {
+          network: "glo",
+          data: "500MB",
+          price: 150,
+          plan_id: 810
+        },
+        "glo|1GB": {
+          network: "glo",
+          data: "1GB",
+          price: 300,
+          plan_id: 811
+        },
+        "glo|2.5GB": {
+          network: "glo",
+          data: "2.5GB",
+          price: 600,
+          plan_id: 493
+        }
+      };
+
+      const product = PRODUCTS[productKey];
+
+      if (!product) {
+        return res.status(400).json({
+          status: "error",
+          message: "This data plan is currently unavailable"
         });
       }
 
@@ -708,25 +804,16 @@ callback_url: "https://cheapdata-backend.onrender.com/",
         });
       }
 
-      const balance =
-        Number(userResult[0].values[0][0]);
+      const balance = Number(userResult[0].values[0][0]);
 
-      const orderPrice = Number(price);
-
-      if (balance < orderPrice) {
+      if (balance < product.price) {
         return res.status(400).json({
           status: "error",
           message: "Insufficient wallet balance"
         });
       }
 
-      db.run(
-        `UPDATE users
-         SET wallet_balance = wallet_balance - ?
-         WHERE id = ?`,
-        [orderPrice, user_id]
-      );
-
+      // Create the order as pending first.
       db.run(
         `INSERT INTO orders
         (user_id, network, data, price, phone, status)
@@ -735,18 +822,106 @@ callback_url: "https://cheapdata-backend.onrender.com/",
           user_id,
           network,
           data,
-          orderPrice,
-          phone,
+          product.price,
+          cleanPhone,
           "pending"
         ]
       );
 
+      const orderResult = db.exec(
+        `SELECT last_insert_rowid()`
+      );
+
+      const orderId =
+        orderResult[0].values[0][0];
+
+      // Reserve/deduct the customer's wallet before supplier request.
+      db.run(
+        `UPDATE users
+         SET wallet_balance = wallet_balance - ?
+         WHERE id = ?`,
+        [product.price, user_id]
+      );
+
       saveDatabase();
 
-      res.status(201).json({
-        status: "success",
-        message: "Order created successfully"
-      });
+      try {
+        const supplierResponse = await axios.post(
+          "https://ericodata.com.ng/wp-json/ericodata/v1/order",
+          {
+            service: "data",
+            network: product.network,
+            phone: cleanPhone,
+            plan_id: product.plan_id
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-Agent-Key": ERICODATA_API_KEY
+            }
+          }
+        );
+
+        const supplierData = supplierResponse.data;
+
+        if (
+          supplierData &&
+          supplierData.success === false
+        ) {
+          throw new Error(
+            supplierData.message ||
+            "Ericodata rejected the order"
+          );
+        }
+
+        db.run(
+          `UPDATE orders
+           SET status = ?
+           WHERE id = ?`,
+          ["successful", orderId]
+        );
+
+        saveDatabase();
+
+        return res.status(201).json({
+          status: "success",
+          message: "Order successful",
+          order_id: orderId
+        });
+
+      } catch (supplierError) {
+
+        console.error(
+          "Ericodata order error:",
+          supplierError.response?.data ||
+          supplierError.message
+        );
+
+        // Refund the customer because supplier order failed.
+        db.run(
+          `UPDATE users
+           SET wallet_balance = wallet_balance + ?
+           WHERE id = ?`,
+          [product.price, user_id]
+        );
+
+        db.run(
+          `UPDATE orders
+           SET status = ?
+           WHERE id = ?`,
+          ["failed", orderId]
+        );
+
+        saveDatabase();
+
+        return res.status(502).json({
+          status: "error",
+          message:
+            supplierError.response?.data?.message ||
+            "Data supplier order failed. Your wallet has been refunded.",
+          order_id: orderId
+        });
+      }
 
     } catch (error) {
       console.error("Order error:", error);
@@ -938,9 +1113,12 @@ app.get("/api/ericodata-test", (req, res) => {
 
 app.get("/api/ericodata-plans-test", async (req, res) => {
   try {
+    const network = req.query.network;
+
     const response = await axios.get(
       "https://ericodata.com.ng/wp-json/ericodata/v1/plans",
       {
+        params: network ? { network } : {},
         headers: {
           "X-Agent-Key": ERICODATA_API_KEY
         }
@@ -949,6 +1127,7 @@ app.get("/api/ericodata-plans-test", async (req, res) => {
 
     res.json({
       status: "success",
+      network: network || "all",
       plans: response.data
     });
 
