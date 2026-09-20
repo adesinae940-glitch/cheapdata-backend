@@ -199,6 +199,26 @@ async function startServer() {
     // Column already exists
   }
   // =========================
+  // ADMIN PASSWORD MIGRATION
+  // =========================
+
+  if (process.env.ADMIN_PASSWORD_HASH) {
+    const admin = db.exec(
+      `SELECT id FROM users WHERE id = ? AND is_admin = 1`,
+      [5]
+    );
+
+    if (admin.length > 0 && admin[0].values.length > 0) {
+      db.run(
+        `UPDATE users SET password = ? WHERE id = ?`,
+        [process.env.ADMIN_PASSWORD_HASH, 5]
+      );
+      saveDatabase();
+      console.log("Admin password migration applied");
+    }
+  }
+
+  // =========================
   // ORDERS TABLE
   // =========================
 
