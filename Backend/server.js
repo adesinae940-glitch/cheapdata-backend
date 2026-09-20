@@ -57,6 +57,10 @@ function createAdminToken(userId) {
 
 function verifyAdminToken(token) {
   try {
+    if (!token || typeof token !== "string") {
+      return null;
+    }
+
     const parts = token.split(".");
 
     if (parts.length !== 3) {
@@ -64,6 +68,14 @@ function verifyAdminToken(token) {
     }
 
     const [userId, timestamp, signature] = parts;
+
+    if (!/^\d+$/.test(userId) || !/^\d+$/.test(timestamp)) {
+      return null;
+    }
+
+    if (!/^[0-9a-f]+$/.test(signature)) {
+      return null;
+    }
 
     const payload = `${userId}.${timestamp}`;
 
@@ -73,6 +85,7 @@ function verifyAdminToken(token) {
       .digest("hex");
 
     if (
+      signature.length !== expectedSignature.length ||
       !crypto.timingSafeEqual(
         Buffer.from(signature),
         Buffer.from(expectedSignature)
@@ -81,13 +94,24 @@ function verifyAdminToken(token) {
       return null;
     }
 
-    const age = Date.now() - Number(timestamp);
+    const userIdNumber = Number(userId);
+    const timestampNumber = Number(timestamp);
 
-    if (age > 24 * 60 * 60 * 1000) {
+    if (!Number.isSafeInteger(userIdNumber) || userIdNumber <= 0) {
       return null;
     }
 
-    return Number(userId);
+    if (!Number.isFinite(timestampNumber)) {
+      return null;
+    }
+
+    const age = Date.now() - timestampNumber;
+
+    if (age < 0 || age > 24 * 60 * 60 * 1000) {
+      return null;
+    }
+
+    return userIdNumber;
 
   } catch (error) {
     return null;
