@@ -19,6 +19,7 @@ const dbPath = path.join(__dirname, "cheapdata.db");
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const ERICODATA_API_KEY = process.env.ERICODATA_API_KEY;
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
+const USER_TOKEN_SECRET = process.env.USER_TOKEN_SECRET;
 
 
 // =========================
@@ -92,6 +93,67 @@ function verifyAdminToken(token) {
     return null;
   }
 }
+
+function createUserToken(userId) {
+  const payload = `${userId}.${Date.now()}`;
+
+  const signature = crypto
+    .createHmac("sha256", USER_TOKEN_SECRET)
+    .update(payload)
+    .digest("hex");
+
+  return `${payload}.${signature}`;
+}
+
+function verifyUserToken(token) {
+  try {
+    const parts = String(token || "").split(".");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const [userId, timestamp, signature] = parts;
+    const payload = `${userId}.${timestamp}`;
+
+    const expectedSignature = crypto
+      .createHmac("sha256", USER_TOKEN_SECRET)
+      .update(payload)
+      .digest("hex");
+
+    if (
+      signature.length !== expectedSignature.length ||
+      !crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature)
+      )
+    ) {
+      return null;
+    }
+
+    const numericUserId = Number(userId);
+    const numericTimestamp = Number(timestamp);
+
+    if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
+      return null;
+    }
+
+    if (!Number.isFinite(numericTimestamp)) {
+      return null;
+    }
+
+    const age = Date.now() - numericTimestamp;
+
+    if (age < 0 || age > 24 * 60 * 60 * 1000) {
+      return null;
+    }
+
+    return numericUserId;
+  } catch (error) {
+    return null;
+  }
+}
+
 let db;
 
 async function startServer() {
@@ -294,9 +356,8 @@ res.json({
     wallet: user[5],
     is_admin: user[6]
   },
-  adminToken: Number(user[6]) === 1
-    ? createAdminToken(user[0])
-    : null
+  adminToken: Number(user[6]) === 1 ? createAdminToken(user[0]) : null,
+  userToken: createUserToken(user[0])
 });
     } catch (error) {
       console.error("Login error:", error);
@@ -364,6 +425,28 @@ res.json({
       });
     }
   }
+  function requireUser(req, res, next) {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ status: "error", message: "Login required" });
+      }
+      const userId = verifyUserToken(authHeader.substring(7));
+      if (!userId) {
+        return res.status(401).json({ status: "error", message: "Invalid or expired login token" });
+      }
+      const result = db.exec(`SELECT id FROM users WHERE id = ?`, [userId]);
+      if (result.length === 0 || result[0].values.length === 0) {
+        return res.status(401).json({ status: "error", message: "User account not found" });
+      }
+      req.userId = userId;
+      next();
+    } catch (error) {
+      console.error("User authorization error:", error);
+      return res.status(500).json({ status: "error", message: "Server error" });
+    }
+  }
+
  // GET WALLET
   // =========================
 
@@ -692,16 +775,17 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // CREATE ORDER
   // =========================
 
-  app.post("/api/orders", async (req, res) => {
+  app.post("/api/orders", requireUser, async (req, res) => {
     try {
       const {
-        user_id,
         network,
         data,
         phone
       } = req.body;
 
-      if (!user_id || !network || !data || !phone) {
+      const user_id = req.userId;
+
+      if (!network || !data || !phone) {
         return res.status(400).json({
           status: "error",
           message: "All order fields are required"

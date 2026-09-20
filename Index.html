@@ -901,17 +901,21 @@ async function login(event) {
         }
 
         localStorage.setItem("loggedIn", "true");
-        localStorage.setItem("cheapDataUser", JSON.stringify(result.user));
-if (result.adminToken) {
-    const adminUser = {
-        ...result.user,
-        adminToken: result.adminToken
-    };
 
-    localStorage.setItem("cheapDataUser", JSON.stringify(adminUser));
+        const loggedInUser = {
+            ...result.user,
+            userToken: result.userToken,
+            adminToken: result.adminToken
+        };
 
-    document.getElementById("adminButton").style.display = "inline-block";
-}
+        localStorage.setItem(
+            "cheapDataUser",
+            JSON.stringify(loggedInUser)
+        );
+
+        if (result.adminToken) {
+            document.getElementById("adminButton").style.display = "inline-block";
+        }
         document.getElementById("userWelcome").innerText =
             "Welcome, " + result.user.name + "!";
 
@@ -984,7 +988,8 @@ async function confirmOrder() {
         const response = await fetch("https://cheapdata-backend.onrender.com/api/orders", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + savedUser.userToken
             },
             body: JSON.stringify({
                 user_id: savedUser.id,
