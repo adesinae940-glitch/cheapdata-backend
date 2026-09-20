@@ -1046,7 +1046,12 @@ async function showOrders() {
 
     try {
         const response = await fetch(
-            "https://cheapdata-backend.onrender.com/api/orders/" + savedUser.id
+            "https://cheapdata-backend.onrender.com/api/orders",
+            {
+                headers: {
+                    "Authorization": "Bearer " + savedUser.userToken
+                }
+            }
         );
  
         const result = await response.json();

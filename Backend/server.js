@@ -1036,9 +1036,9 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // GET ORDERS
   // =========================
 
-  app.get("/api/orders/:user_id", (req, res) => {
+  app.get("/api/orders", requireUser, (req, res) => {
     try {
-      const userId = Number(req.params.user_id);
+      const userId = req.userId;
 
       const result = db.exec(
         `SELECT id, network, data, price, phone, status, created_at
