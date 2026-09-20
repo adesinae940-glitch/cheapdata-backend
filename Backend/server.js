@@ -168,18 +168,6 @@ async function startServer() {
   }
 
   // =========================
-  // TEMPORARY PASSWORD RESET
-  // =========================
-  if (process.env.TEMP_PASSWORD_HASH) {
-    db.run(
-      `UPDATE users SET password = ? WHERE id = ?`,
-      [process.env.TEMP_PASSWORD_HASH, 5]
-    );
-    saveDatabase();
-    console.log("Temporary password reset completed for user ID 5");
-  }
-
-  // =========================
   // USERS TABLE
   // =========================
 
