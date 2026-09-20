@@ -511,10 +511,11 @@ res.json({
   // =========================
 
   app.get(
-    "/api/wallet/transactions/:user_id",
+    "/api/wallet/transactions",
+    requireUser,
     (req, res) => {
       try {
-        const userId = Number(req.params.user_id);
+        const userId = req.userId;
 
         const result = db.exec(
           `SELECT id, type, amount, status, reference, created_at
