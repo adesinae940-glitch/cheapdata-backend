@@ -470,16 +470,9 @@ res.json({
  // GET WALLET
   // =========================
 
-  app.get("/api/wallet/:user_id", (req, res) => {
+  app.get("/api/wallet", requireUser, (req, res) => {
     try {
-      const userId = Number(req.params.user_id);
-
-      if (!Number.isInteger(userId) || userId <= 0) {
-        return res.status(400).json({
-          status: "error",
-          message: "Invalid user ID"
-        });
-      }
+      const userId = req.userId;
 
       const result = db.exec(
         `SELECT id, name, wallet_balance
@@ -566,14 +559,15 @@ res.json({
   // PAYSTACK FUND WALLET
   // =========================
 
-  app.post("/api/wallet/fund", async (req, res) => {
+  app.post("/api/wallet/fund", requireUser, async (req, res) => {
     try {
-      const { user_id, amount } = req.body;
+      const user_id = req.userId;
+      const { amount } = req.body;
 
-      if (!user_id || !amount) {
+      if (!amount) {
         return res.status(400).json({
           status: "error",
-          message: "User ID and amount are required"
+          message: "Amount is required"
         });
       }
 
