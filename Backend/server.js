@@ -1179,33 +1179,27 @@ async function startServer() {
   // GET ORDERS
   // =========================
 
-  app.get("/api/orders", requireUser, (req, res) => {
+  app.get("/api/orders", requireUser, async (req, res) => {
     try {
       const userId = req.userId;
 
-      const result = db.exec(
+      const result = await pgPool.query(
         `SELECT id, network, data, price, phone, status, created_at
          FROM orders
-         WHERE user_id = ?
+         WHERE user_id = $1
          ORDER BY id DESC`,
         [userId]
       );
 
-      const orders = [];
-
-      if (result.length > 0) {
-        result[0].values.forEach(row => {
-          orders.push({
-            id: row[0],
-            network: row[1],
-            data: row[2],
-            price: row[3],
-            phone: row[4],
-            status: row[5],
-            date: row[6]
-          });
-        });
-      }
+      const orders = result.rows.map(row => ({
+        id: row.id,
+        network: row.network,
+        data: row.data,
+        price: Number(row.price),
+        phone: row.phone,
+        status: row.status,
+        date: row.created_at
+      }));
 
       res.json({
         status: "success",
@@ -1213,7 +1207,7 @@ async function startServer() {
       });
 
     } catch (error) {
-      console.error("Get orders error:", error);
+      console.error("Get orders PostgreSQL error:", error);
 
       res.status(500).json({
         status: "error",
@@ -1221,6 +1215,7 @@ async function startServer() {
       });
     }
   });
+
   // =========================
   // ADMIN ORDERS
   // =========================
