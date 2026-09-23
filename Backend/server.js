@@ -894,7 +894,51 @@ async function startServer() {
   // CREATE ORDER
   // =========================
 
-  app.post("/api/orders", requireUser, async (req, res) => {
+  app.get("/api/ericodata/plans", async (req, res) => {
+  try {
+    const network = String(req.query.network || "").trim().toLowerCase();
+
+    if (!["mtn", "airtel", "glo"].includes(network)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Network must be mtn, airtel, or glo"
+      });
+    }
+
+    if (!ERICODATA_API_KEY) {
+      return res.status(500).json({
+        status: "error",
+        message: "Ericodata API key is not configured"
+      });
+    }
+
+    const response = await axios.get(
+      "https://ericodata.com.ng/wp-json/ericodata/v1/plans",
+      {
+        params: { network },
+        headers: {
+          "X-Agent-Key": ERICODATA_API_KEY
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error(
+      "Ericodata plans error:",
+      error.response?.data || error.message
+    );
+
+    res.status(error.response?.status || 500).json(
+      error.response?.data || {
+        status: "error",
+        message: "Unable to fetch Ericodata plans"
+      }
+    );
+  }
+});
+
+app.post("/api/orders", requireUser, async (req, res) => {
     try {
       const {
         network,
