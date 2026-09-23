@@ -1462,3 +1462,21 @@ function saveDatabase() {
 }
 
 startServer();
+
+app.get("/api/postgres-status", requireAdmin, async (req, res) => {
+  try {
+    const users = await pgPool.query("SELECT COUNT(*) AS count FROM users");
+    const orders = await pgPool.query("SELECT COUNT(*) AS count FROM orders");
+    const wallet = await pgPool.query("SELECT COUNT(*) AS count FROM wallet_transactions");
+
+    res.json({
+      status: "success",
+      users: Number(users.rows[0].count),
+      orders: Number(orders.rows[0].count),
+      wallet_transactions: Number(wallet.rows[0].count)
+    });
+  } catch (error) {
+    console.error("PostgreSQL status error:", error);
+    res.status(500).json({ status: "error", message: "Database check failed" });
+  }
+});
