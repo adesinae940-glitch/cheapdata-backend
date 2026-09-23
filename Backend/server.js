@@ -1223,6 +1223,65 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // TEST API
   // =========================
 
+  app.get("/api/postgres-migrate-orders", requireAdmin, async (req, res) => {
+    if (!pgPool) {
+      return res.status(500).json({
+        status: "error",
+        message: "PostgreSQL is not configured"
+      });
+    }
+
+    try {
+      const ordersResult = db.exec(`
+        SELECT id, user_id, network, data, price, phone, status, created_at
+        FROM orders
+        ORDER BY id
+      `);
+
+      if (!ordersResult.length) {
+        return res.json({
+          status: "success",
+          message: "No SQLite orders found",
+          migrated: 0
+        });
+      }
+
+      let migrated = 0;
+
+      for (const row of ordersResult[0].values) {
+        await pgPool.query(`
+          INSERT INTO orders
+            (id, user_id, network, data, price, phone, status, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (id) DO UPDATE SET
+            user_id = EXCLUDED.user_id,
+            network = EXCLUDED.network,
+            data = EXCLUDED.data,
+            price = EXCLUDED.price,
+            phone = EXCLUDED.phone,
+            status = EXCLUDED.status,
+            created_at = EXCLUDED.created_at
+        `, row);
+
+        migrated++;
+      }
+
+      res.json({
+        status: "success",
+        message: "Orders migrated successfully",
+        migrated
+      });
+    } catch (error) {
+      console.error("Order migration error:", error.message);
+
+      res.status(500).json({
+        status: "error",
+        message: "Order migration failed",
+        error: error.message
+      });
+    }
+  });
+
   app.get("/api/postgres-migrate-users", requireAdmin, async (req, res) => {
     if (!pgPool) {
       return res.status(500).json({
