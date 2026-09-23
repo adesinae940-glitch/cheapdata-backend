@@ -943,12 +943,6 @@ async function startServer() {
           plan_id: 473
         },
 
-        "airtel|600MB": {
-          network: "airtel",
-          data: "600MB",
-          price: 300,
-          plan_id: 478
-        },
         "airtel|1GB": {
           network: "airtel",
           data: "1GB",
