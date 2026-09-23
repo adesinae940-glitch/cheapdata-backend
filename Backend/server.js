@@ -483,7 +483,7 @@ async function startServer() {
       });
     }
   }
-  function requireUser(req, res, next) {
+  async function requireUser(req, res, next) {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -493,10 +493,25 @@ async function startServer() {
       if (!userId) {
         return res.status(401).json({ status: "error", message: "Invalid or expired login token" });
       }
-      const result = db.exec(`SELECT id FROM users WHERE id = ?`, [userId]);
-      if (result.length === 0 || result[0].values.length === 0) {
-        return res.status(401).json({ status: "error", message: "User account not found" });
+      if (!pgPool) {
+        return res.status(500).json({
+          status: "error",
+          message: "PostgreSQL is not configured"
+        });
       }
+
+      const result = await pgPool.query(
+        "SELECT id FROM users WHERE id = $1",
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(401).json({
+          status: "error",
+          message: "User account not found"
+        });
+      }
+
       req.userId = userId;
       next();
     } catch (error) {
