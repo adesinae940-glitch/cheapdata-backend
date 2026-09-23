@@ -571,32 +571,33 @@ async function startServer() {
   app.get(
     "/api/wallet/transactions",
     requireUser,
-    (req, res) => {
+    async (req, res) => {
       try {
         const userId = req.userId;
 
-        const result = db.exec(
+        if (!pgPool) {
+          return res.status(500).json({
+            status: "error",
+            message: "PostgreSQL is not configured"
+          });
+        }
+
+        const result = await pgPool.query(
           `SELECT id, type, amount, status, reference, created_at
            FROM wallet_transactions
-           WHERE user_id = ?
+           WHERE user_id = $1
            ORDER BY id DESC`,
           [userId]
         );
 
-        const transactions = [];
-
-        if (result.length > 0) {
-          result[0].values.forEach(row => {
-            transactions.push({
-              id: row[0],
-              type: row[1],
-              amount: row[2],
-              status: row[3],
-              reference: row[4],
-              date: row[5]
-            });
-          });
-        }
+        const transactions = result.rows.map(row => ({
+          id: row.id,
+          type: row.type,
+          amount: Number(row.amount),
+          status: row.status,
+          reference: row.reference,
+          date: row.created_at
+        }));
 
         res.json({
           status: "success",
@@ -604,7 +605,7 @@ async function startServer() {
         });
 
       } catch (error) {
-        console.error("Transactions error:", error);
+        console.error("Transactions PostgreSQL error:", error);
 
         res.status(500).json({
           status: "error",
