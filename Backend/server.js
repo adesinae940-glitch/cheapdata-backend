@@ -1215,6 +1215,41 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // TEST API
   // =========================
 
+  app.get("/api/postgres-test", async (req, res) => {
+    try {
+      const { Pool } = require("pg");
+
+      if (!process.env.DATABASE_URL) {
+        return res.status(500).json({
+          status: "error",
+          message: "DATABASE_URL is not configured"
+        });
+      }
+
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      });
+
+      const result = await pool.query("SELECT NOW() AS now");
+      await pool.end();
+
+      res.json({
+        status: "success",
+        message: "PostgreSQL connection is working!",
+        time: result.rows[0].now
+      });
+    } catch (error) {
+      console.error("PostgreSQL test error:", error.message);
+
+      res.status(500).json({
+        status: "error",
+        message: "PostgreSQL connection failed",
+        error: error.message
+      });
+    }
+  });
+
   app.get("/api", (req, res) => {
     res.json({
       status: "success",
