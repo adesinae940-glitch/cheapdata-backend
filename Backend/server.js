@@ -902,7 +902,7 @@ async function startServer() {
         phone
       } = req.body;
 
-      const user_id = req.userId;
+      const userId = req.userId;
 
       if (!network || !data || !phone) {
         return res.status(400).json({
@@ -991,24 +991,28 @@ async function startServer() {
         });
       }
 
-      const userResult = db.exec(
+      if (!pgPool) {
+        return res.status(500).json({
+          status: "error",
+          message: "PostgreSQL is not configured"
+        });
+      }
+
+      const userResult = await pgPool.query(
         `SELECT wallet_balance
          FROM users
-         WHERE id = ?`,
-        [user_id]
+         WHERE id = $1`,
+        [userId]
       );
 
-      if (
-        userResult.length === 0 ||
-        userResult[0].values.length === 0
-      ) {
+      if (userResult.rows.length === 0) {
         return res.status(404).json({
           status: "error",
           message: "User not found"
         });
       }
 
-      const balance = Number(userResult[0].values[0][0]);
+      const balance = Number(userResult.rows[0].wallet_balance);
 
       if (balance < product.price) {
         return res.status(400).json({
@@ -1017,37 +1021,69 @@ async function startServer() {
         });
       }
 
-      // Create the order as pending first.
-      db.run(
-        `INSERT INTO orders
-        (user_id, network, data, price, phone, status)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          user_id,
-          network,
-          data,
-          product.price,
-          cleanPhone,
-          "pending"
-        ]
-      );
+      const client = await pgPool.connect();
+      let orderId;
 
-      const orderResult = db.exec(
-        `SELECT last_insert_rowid()`
-      );
+      try {
+        await client.query("BEGIN");
 
-      const orderId =
-        orderResult[0].values[0][0];
+        const lockedUser = await client.query(
+          `SELECT wallet_balance
+           FROM users
+           WHERE id = $1
+           FOR UPDATE`,
+          [userId]
+        );
 
-      // Reserve/deduct the customer's wallet before supplier request.
-      db.run(
-        `UPDATE users
-         SET wallet_balance = wallet_balance - ?
-         WHERE id = ?`,
-        [product.price, user_id]
-      );
+        if (lockedUser.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({
+            status: "error",
+            message: "User not found"
+          });
+        }
 
-      saveDatabase();
+        const lockedBalance = Number(lockedUser.rows[0].wallet_balance);
+
+        if (lockedBalance < product.price) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            status: "error",
+            message: "Insufficient wallet balance"
+          });
+        }
+
+        const orderResult = await client.query(
+          `INSERT INTO orders
+          (user_id, network, data, price, phone, status)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING id`,
+          [
+            userId,
+            product.network,
+            product.data,
+            product.price,
+            cleanPhone,
+            "pending"
+          ]
+        );
+
+        orderId = orderResult.rows[0].id;
+
+        await client.query(
+          `UPDATE users
+           SET wallet_balance = wallet_balance - $1
+           WHERE id = $2`,
+          [product.price, userId]
+        );
+
+        await client.query("COMMIT");
+      } catch (dbError) {
+        await client.query("ROLLBACK");
+        throw dbError;
+      } finally {
+        client.release();
+      }
 
       try {
         const supplierResponse = await axios.post(
@@ -1078,14 +1114,12 @@ async function startServer() {
           );
         }
 
-        db.run(
+        await pgPool.query(
           `UPDATE orders
-           SET status = ?
-           WHERE id = ?`,
+           SET status = $1
+           WHERE id = $2`,
           ["successful", orderId]
         );
-
-        saveDatabase();
 
         return res.status(201).json({
           status: "success",
@@ -1101,22 +1135,32 @@ async function startServer() {
           supplierError.message
         );
 
-        // Refund the customer because supplier order failed.
-        db.run(
-          `UPDATE users
-           SET wallet_balance = wallet_balance + ?
-           WHERE id = ?`,
-          [product.price, user_id]
-        );
+        const refundClient = await pgPool.connect();
 
-        db.run(
-          `UPDATE orders
-           SET status = ?
-           WHERE id = ?`,
-          ["failed", orderId]
-        );
+        try {
+          await refundClient.query("BEGIN");
 
-        saveDatabase();
+          await refundClient.query(
+            `UPDATE users
+             SET wallet_balance = wallet_balance + $1
+             WHERE id = $2`,
+            [product.price, userId]
+          );
+
+          await refundClient.query(
+            `UPDATE orders
+             SET status = $1
+             WHERE id = $2`,
+            ["failed", orderId]
+          );
+
+          await refundClient.query("COMMIT");
+        } catch (refundError) {
+          await refundClient.query("ROLLBACK");
+          console.error("Order refund error:", refundError);
+        } finally {
+          refundClient.release();
+        }
 
         return res.status(502).json({
           status: "error",
