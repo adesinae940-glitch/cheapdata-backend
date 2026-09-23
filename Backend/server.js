@@ -1223,6 +1223,64 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // TEST API
   // =========================
 
+  app.get("/api/postgres-migrate-users", requireAdmin, async (req, res) => {
+    if (!pgPool) {
+      return res.status(500).json({
+        status: "error",
+        message: "PostgreSQL is not configured"
+      });
+    }
+
+    try {
+      const usersResult = db.exec(`
+        SELECT id, name, email, phone, password, wallet_balance, is_admin
+        FROM users
+        ORDER BY id
+      `);
+
+      if (!usersResult.length) {
+        return res.json({
+          status: "success",
+          message: "No SQLite users found",
+          migrated: 0
+        });
+      }
+
+      let migrated = 0;
+
+      for (const row of usersResult[0].values) {
+        await pgPool.query(`
+          INSERT INTO users
+            (id, name, email, phone, password, wallet_balance, is_admin)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            phone = EXCLUDED.phone,
+            password = EXCLUDED.password,
+            wallet_balance = EXCLUDED.wallet_balance,
+            is_admin = EXCLUDED.is_admin
+        `, row);
+
+        migrated++;
+      }
+
+      res.json({
+        status: "success",
+        message: "Users migrated successfully",
+        migrated
+      });
+    } catch (error) {
+      console.error("User migration error:", error.message);
+
+      res.status(500).json({
+        status: "error",
+        message: "User migration failed",
+        error: error.message
+      });
+    }
+  });
+
   app.get("/api/postgres-init", async (req, res) => {
     if (!pgPool) {
       return res.status(500).json({
