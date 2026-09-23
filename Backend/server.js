@@ -302,12 +302,19 @@ async function startServer() {
         });
       }
 
-      const existing = db.exec(
-        "SELECT id FROM users WHERE email = ?",
+      if (!pgPool) {
+        return res.status(500).json({
+          status: "error",
+          message: "PostgreSQL is not configured"
+        });
+      }
+
+      const existing = await pgPool.query(
+        "SELECT id FROM users WHERE email = $1",
         [email]
       );
 
-      if (existing.length > 0 && existing[0].values.length > 0) {
+      if (existing.rows.length > 0) {
         return res.status(409).json({
           status: "error",
           message: "Email already registered"
@@ -316,41 +323,37 @@ async function startServer() {
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      db.run(
+      const result = await pgPool.query(
         `INSERT INTO users
-        (name, email, phone, password, wallet_balance)
-        VALUES (?, ?, ?, ?, 0)`,
+        (name, email, phone, password, wallet_balance, is_admin)
+        VALUES ($1, $2, $3, $4, 0, 0)
+        RETURNING id`,
         [name, email, phone, hashedPassword]
       );
 
-      saveDatabase();
-
-      const result = db.exec(
-        "SELECT id FROM users WHERE email = ?",
-        [email]
-      );
-
-      const userId = result[0].values[0][0];
+      const userId = result.rows[0].id;
 
       res.status(201).json({
         status: "success",
         message: "Registration successful",
         userId
       });
-
     } catch (error) {
-      console.error("Signup error:", error);
+      console.error("Signup PostgreSQL error:", error);
+
+      if (error.code === "23505") {
+        return res.status(409).json({
+          status: "error",
+          message: "Email already registered"
+        });
+      }
 
       res.status(500).json({
         status: "error",
-        message: "Server error"
+        message: "Registration failed"
       });
     }
   });
-
-  // =========================
-  // LOGIN
-  // =========================
 
   app.post("/api/login", async (req, res) => {
     try {
