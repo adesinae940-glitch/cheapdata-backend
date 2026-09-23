@@ -366,31 +366,32 @@ async function startServer() {
         });
       }
 
-const result = db.exec(
-  `SELECT id, name, email, phone, password, wallet_balance, is_admin
-   FROM users
-   WHERE email = ?`,
-  [email]
-);
-      if (
-        result.length === 0 ||
-        result[0].values.length === 0
-      ) {
+      if (!pgPool) {
+        return res.status(500).json({
+          status: "error",
+          message: "PostgreSQL is not configured"
+        });
+      }
+
+      const result = await pgPool.query(
+        `SELECT id, name, email, phone, password, wallet_balance, is_admin
+         FROM users
+         WHERE email = $1`,
+        [email]
+      );
+
+      if (result.rows.length === 0) {
         return res.status(401).json({
           status: "error",
           message: "Invalid email or password"
         });
       }
 
-      const user = result[0].values[0];
-console.log("LOGIN DEBUG:", {
-  email,
-  userId: user[0],
-  passwordMatch: await bcrypt.compare(password, user[4])
-});
+      const user = result.rows[0];
+
       const passwordMatch = await bcrypt.compare(
         password,
-        user[4]
+        user.password
       );
 
       if (!passwordMatch) {
@@ -400,22 +401,24 @@ console.log("LOGIN DEBUG:", {
         });
       }
 
-res.json({
-  status: "success",
-  message: "Login successful",
-  user: {
-    id: user[0],
-    name: user[1],
-    email: user[2],
-    phone: user[3],
-    wallet: user[5],
-    is_admin: user[6]
-  },
-  adminToken: Number(user[6]) === 1 ? createAdminToken(user[0]) : null,
-  userToken: createUserToken(user[0])
-});
+      res.json({
+        status: "success",
+        message: "Login successful",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          wallet: Number(user.wallet_balance),
+          is_admin: user.is_admin
+        },
+        adminToken: Number(user.is_admin) === 1
+          ? createAdminToken(user.id)
+          : null,
+        userToken: createUserToken(user.id)
+      });
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Login PostgreSQL error:", error);
 
       res.status(500).json({
         status: "error",
