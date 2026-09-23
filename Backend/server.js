@@ -621,7 +621,7 @@ async function startServer() {
 
   app.post("/api/wallet/fund", requireUser, async (req, res) => {
     try {
-      const user_id = req.userId;
+      const userId = req.userId;
       const { amount } = req.body;
 
       if (!amount) {
@@ -647,31 +647,35 @@ async function startServer() {
         });
       }
 
-      const result = db.exec(
-        `SELECT email FROM users WHERE id = ?`,
-        [user_id]
+      if (!pgPool) {
+        return res.status(500).json({
+          status: "error",
+          message: "PostgreSQL is not configured"
+        });
+      }
+
+      const userResult = await pgPool.query(
+        "SELECT email FROM users WHERE id = $1",
+        [userId]
       );
 
-      if (
-        result.length === 0 ||
-        result[0].values.length === 0
-      ) {
+      if (userResult.rows.length === 0) {
         return res.status(404).json({
           status: "error",
           message: "User not found"
         });
       }
 
-      const email = result[0].values[0][0];
+      const email = userResult.rows[0].email;
 
       const response = await axios.post(
         "https://api.paystack.co/transaction/initialize",
         {
           email,
           amount: Math.round(Number(amount) * 100),
-callback_url: "https://cheapdata-backend.onrender.com/",
+          callback_url: "https://cheapdata-backend.onrender.com/",
           metadata: {
-            user_id: Number(user_id)
+            user_id: Number(userId)
           }
         },
         {
@@ -684,20 +688,18 @@ callback_url: "https://cheapdata-backend.onrender.com/",
 
       const payment = response.data.data;
 
-      db.run(
+      await pgPool.query(
         `INSERT INTO wallet_transactions
         (user_id, type, amount, status, reference)
-        VALUES (?, ?, ?, ?, ?)`,
+        VALUES ($1, $2, $3, $4, $5)`,
         [
-          user_id,
+          userId,
           "credit",
           Number(amount),
           "pending",
           payment.reference
         ]
       );
-
-      saveDatabase();
 
       res.json({
         status: "success",
