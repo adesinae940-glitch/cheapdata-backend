@@ -1481,5 +1481,3 @@ function saveDatabase() {
 
 startServer();
 
-  }
-});
