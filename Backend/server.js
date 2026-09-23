@@ -732,30 +732,33 @@ async function startServer() {
       try {
         const reference = req.params.reference;
 
-        const transactionResult = db.exec(
+        if (!pgPool) {
+          return res.status(500).json({
+            status: "error",
+            message: "PostgreSQL is not configured"
+          });
+        }
+
+        const transactionResult = await pgPool.query(
           `SELECT id, user_id, amount, status
            FROM wallet_transactions
-           WHERE reference = ?`,
+           WHERE reference = $1`,
           [reference]
         );
 
-        if (
-          transactionResult.length === 0 ||
-          transactionResult[0].values.length === 0
-        ) {
+        if (transactionResult.rows.length === 0) {
           return res.status(404).json({
             status: "error",
             message: "Transaction not found"
           });
         }
 
-        const transaction =
-          transactionResult[0].values[0];
+        const transaction = transactionResult.rows[0];
 
-        const transactionId = transaction[0];
-        const userId = transaction[1];
-        const expectedAmount = Number(transaction[2]);
-        const currentStatus = transaction[3];
+        const transactionId = transaction.id;
+        const userId = transaction.user_id;
+        const expectedAmount = Number(transaction.amount);
+        const currentStatus = transaction.status;
 
         if (currentStatus === "success") {
           return res.json({
@@ -789,8 +792,7 @@ async function startServer() {
           });
         }
 
-        const paidAmount =
-          Number(payment.amount) / 100;
+        const paidAmount = Number(payment.amount) / 100;
 
         if (paidAmount !== expectedAmount) {
           return res.status(400).json({
@@ -799,31 +801,72 @@ async function startServer() {
           });
         }
 
-        db.run(
-          `UPDATE users
-           SET wallet_balance = wallet_balance + ?
-           WHERE id = ?`,
-          [expectedAmount, userId]
-        );
+        const client = await pgPool.connect();
 
-        db.run(
-          `UPDATE wallet_transactions
-           SET status = "success"
-           WHERE id = ?`,
-          [transactionId]
-        );
+        try {
+          await client.query("BEGIN");
 
-        saveDatabase();
+          const lockResult = await client.query(
+            `SELECT status
+             FROM wallet_transactions
+             WHERE id = $1
+             FOR UPDATE`,
+            [transactionId]
+          );
 
-        const userResult = db.exec(
+          if (lockResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+              status: "error",
+              message: "Transaction not found"
+            });
+          }
+
+          if (lockResult.rows[0].status === "success") {
+            await client.query("COMMIT");
+            return res.json({
+              status: "success",
+              message: "Transaction already verified"
+            });
+          }
+
+          await client.query(
+            `UPDATE users
+             SET wallet_balance = wallet_balance + $1
+             WHERE id = $2`,
+            [expectedAmount, userId]
+          );
+
+          await client.query(
+            `UPDATE wallet_transactions
+             SET status = $1
+             WHERE id = $2`,
+            ["success", transactionId]
+          );
+
+          await client.query("COMMIT");
+        } catch (dbError) {
+          await client.query("ROLLBACK");
+          throw dbError;
+        } finally {
+          client.release();
+        }
+
+        const userResult = await pgPool.query(
           `SELECT wallet_balance
            FROM users
-           WHERE id = ?`,
+           WHERE id = $1`,
           [userId]
         );
 
-        const newBalance =
-          userResult[0].values[0][0];
+        if (userResult.rows.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            message: "User not found"
+          });
+        }
+
+        const newBalance = Number(userResult.rows[0].wallet_balance);
 
         res.json({
           status: "success",
