@@ -1115,22 +1115,6 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // ADMIN ORDERS
   // =========================
 
-  app.get("/api/postgres-fix-ids", requireAdmin, async (req, res) => {
-    try {
-      await pgPool.query(`CREATE SEQUENCE IF NOT EXISTS users_id_seq`);
-      await pgPool.query(`ALTER TABLE users ALTER COLUMN id SET DEFAULT nextval('users_id_seq')`);
-      await pgPool.query(`ALTER SEQUENCE users_id_seq OWNED BY users.id`);
-      await pgPool.query(`SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 0) + 1, false)`);
-      await pgPool.query(`CREATE SEQUENCE IF NOT EXISTS orders_id_seq`);
-      await pgPool.query(`ALTER TABLE orders ALTER COLUMN id SET DEFAULT nextval('orders_id_seq')`);
-      await pgPool.query(`ALTER SEQUENCE orders_id_seq OWNED BY orders.id`);
-      await pgPool.query(`SELECT setval('orders_id_seq', COALESCE((SELECT MAX(id) FROM orders), 0) + 1, false)`);
-      res.json({ status: "success", message: "PostgreSQL ID generation fixed" });
-    } catch (error) {
-      console.error("PostgreSQL ID fix error:", error);
-      res.status(500).json({ status: "error", message: "ID migration failed" });
-    }
-  });
 
   app.get("/api/admin/orders", requireAdmin, (req, res) => {
     try {
