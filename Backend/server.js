@@ -7,6 +7,14 @@ const initSqlJs = require("sql.js");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const axios = require("axios");
+const { Pool } = require("pg");
+
+const pgPool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    })
+  : null;
 
 const app = express();
 
@@ -1214,6 +1222,63 @@ callback_url: "https://cheapdata-backend.onrender.com/",
   // =========================
   // TEST API
   // =========================
+
+  app.get("/api/postgres-init", async (req, res) => {
+    if (!pgPool) {
+      return res.status(500).json({
+        status: "error",
+        message: "PostgreSQL is not configured"
+      });
+    }
+
+    try {
+      await pgPool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          phone TEXT NOT NULL,
+          password TEXT NOT NULL,
+          wallet_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
+          is_admin INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS orders (
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          network TEXT NOT NULL,
+          data TEXT NOT NULL,
+          price INTEGER NOT NULL,
+          phone TEXT NOT NULL,
+          status TEXT DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS wallet_transactions (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          type TEXT NOT NULL,
+          amount NUMERIC(12,2) NOT NULL,
+          status TEXT NOT NULL,
+          reference TEXT UNIQUE NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      res.json({
+        status: "success",
+        message: "PostgreSQL tables created successfully"
+      });
+    } catch (error) {
+      console.error("PostgreSQL init error:", error.message);
+
+      res.status(500).json({
+        status: "error",
+        message: "PostgreSQL table creation failed",
+        error: error.message
+      });
+    }
+  });
 
   app.get("/api/postgres-test", async (req, res) => {
     try {
