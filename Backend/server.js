@@ -1143,12 +1143,13 @@ app.post("/api/orders", requireUser, async (req, res) => {
         const supplierData = supplierResponse.data;
 
         if (
-          supplierData &&
-          supplierData.success === false
+          !supplierData ||
+          supplierData.success !== true ||
+          String(supplierData.Status || "").toLowerCase() !== "successful"
         ) {
           throw new Error(
-            supplierData.message ||
-            "Ericodata rejected the order"
+            supplierData?.message ||
+            "Ericodata did not confirm the order as successful"
           );
         }
 
