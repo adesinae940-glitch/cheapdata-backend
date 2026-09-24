@@ -972,7 +972,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "mtn",
           data: "500MB",
           price: 350,
-          plan_id: 528
+          plan_id: 471
         },
         "mtn|1GB": {
           network: "mtn",
