@@ -1010,7 +1010,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "glo",
           data: "1GB",
           price: 300,
-          plan_id: 811
+          plan_id: 862
         },
         "glo|2.5GB": {
           network: "glo",
