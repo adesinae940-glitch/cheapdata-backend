@@ -26,6 +26,8 @@ const dbPath = path.join(__dirname, "cheapdata.db");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const ERICODATA_API_KEY = process.env.ERICODATA_API_KEY;
+const MELE_API_KEY = process.env.MELE_API_KEY;
+const MELE_BASE_URL = "https://meledata.ng/api/v1/developer";
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
 const USER_TOKEN_SECRET = process.env.USER_TOKEN_SECRET;
 
@@ -972,19 +974,19 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "mtn",
           data: "500MB",
           price: 350,
-          plan_id: 471
+          plan_id: 456
         },
         "mtn|1GB": {
           network: "mtn",
           data: "1GB",
           price: 500,
-          plan_id: 861
+          plan_id: 530
         },
         "mtn|2GB": {
           network: "mtn",
           data: "2GB",
           price: 900,
-          plan_id: 473
+          plan_id: 531
         },
 
         "airtel|1GB": {
@@ -1118,18 +1120,20 @@ app.post("/api/orders", requireUser, async (req, res) => {
       }
 
       try {
+        const meleReference = `DEV_DATA_${orderId}_${Date.now()}`;
+
         const supplierResponse = await axios.post(
-          "https://ericodata.com.ng/wp-json/ericodata/v1/order",
+          `${MELE_BASE_URL}/data/purchase`,
           {
-            service: "data",
-            network: product.network,
-            phone: cleanPhone,
-            plan_id: product.plan_id
+            network: product.network.toUpperCase(),
+            phone_number: cleanPhone,
+            plan_id: product.plan_id,
+            reference: meleReference
           },
           {
             headers: {
               "Content-Type": "application/json",
-              "X-Agent-Key": ERICODATA_API_KEY
+              "Authorization": `Bearer ${MELE_API_KEY}`
             }
           }
         );
@@ -1138,12 +1142,12 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
         if (
           !supplierData ||
-          supplierData.success !== true ||
-          String(supplierData.Status || "").toLowerCase() !== "successful"
+          supplierData.status !== true ||
+          String(supplierData.data?.status || "").toLowerCase() !== "success"
         ) {
           throw new Error(
             supplierData?.message ||
-            "Ericodata did not confirm the order as successful"
+            "Mele Data did not confirm the order as successful"
           );
         }
 
@@ -1163,7 +1167,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
       } catch (supplierError) {
 
         console.error(
-          "Ericodata order error:",
+          "Mele order error:",
           supplierError.response?.data ||
           supplierError.message
         );
