@@ -733,7 +733,7 @@ async function startServer() {
   // =========================
 
   app.get(
-    "/api/wallet/verify/:reference",
+    "/api/wallet/verify/:reference", requireUser,
     async (req, res) => {
       try {
         const reference = req.params.reference;
