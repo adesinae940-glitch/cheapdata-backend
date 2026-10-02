@@ -27,6 +27,10 @@ const dbPath = path.join(__dirname, "cheapdata.db");
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const ERICODATA_API_KEY = process.env.ERICODATA_API_KEY;
 const MELE_API_KEY = process.env.MELE_API_KEY;
+const TEETECH_API_KEY = process.env.TEETECH_API_KEY;
+const BBK_API_KEY = process.env.BBK_API_KEY;
+const NATA_API_KEY = process.env.NATA_API_KEY;
+const NATA_BASE_URL = "https://api.nata.ng/api";
 const MELE_BASE_URL = "https://meledata.ng/api/v1/developer";
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
 const USER_TOKEN_SECRET = process.env.USER_TOKEN_SECRET;
@@ -980,7 +984,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "mtn",
           data: "1GB",
           price: 500,
-          plan_id: 530
+          plan_id: 454
         },
         "mtn|2GB": {
           network: "mtn",
@@ -993,13 +997,13 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "airtel",
           data: "1GB",
           price: 450,
-          plan_id: 625
+          plan_id: 528
         },
         "airtel|2GB": {
           network: "airtel",
           data: "2GB",
           price: 700,
-          plan_id: 617
+          plan_id: 454
 
         },
         "glo|1GB": {
@@ -1120,34 +1124,200 @@ app.post("/api/orders", requireUser, async (req, res) => {
       }
 
       try {
-        const meleReference = `DEV_DATA_${orderId}_${Date.now()}`;
+        let supplierData;
+        let supplierName;
 
-        const supplierResponse = await axios.post(
-          `${MELE_BASE_URL}/data/purchase`,
-          {
-            network: product.network.toUpperCase(),
-            phone_number: cleanPhone,
-            plan_id: product.plan_id,
-            reference: meleReference
-          },
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${MELE_API_KEY}`
+        if (product.network.toLowerCase() === "mtn") {
+          supplierName = "Mele";
+
+          const meleReference = `DEV_DATA_${orderId}_${Date.now()}`;
+
+          const supplierResponse = await axios.post(
+            `${MELE_BASE_URL}/data/purchase`,
+            {
+              network: "MTN",
+              phone_number: cleanPhone,
+              plan_id: product.plan_id,
+              reference: meleReference
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${MELE_API_KEY}`
+              }
             }
+          );
+
+          supplierData = supplierResponse.data;
+
+          if (
+            !supplierData ||
+            supplierData.status !== true ||
+            String(supplierData.data?.status || "").toLowerCase() !== "success"
+          ) {
+            throw new Error(
+              supplierData?.message ||
+              "Mele Data did not confirm the order as successful"
+            );
           }
-        );
 
-        const supplierData = supplierResponse.data;
-
-        if (
-          !supplierData ||
-          supplierData.status !== true ||
-          String(supplierData.data?.status || "").toLowerCase() !== "success"
+        } else if (
+          product.network.toLowerCase() === "airtel" &&
+          product.data === "2GB"
         ) {
+          supplierName = "Nata";
+
+          const nataReference = `NATA${orderId}${Date.now()}`.slice(-12);
+
+          const nataResponse = await axios.post(
+            `${NATA_BASE_URL}/buy-data`,
+            {
+              plan_id: 145,
+              category: "airtel_gifting",
+              phone: cleanPhone,
+              reference: nataReference
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": NATA_API_KEY
+              }
+            }
+          );
+
+          supplierData = nataResponse.data;
+          console.log("Nata response:", JSON.stringify(supplierData));
+
+          if (
+            !supplierData ||
+            String(supplierData.status || "").toLowerCase() !== "success"
+          ) {
+            throw new Error(
+              supplierData?.message ||
+              "Nata did not confirm the Airtel 2GB order as successful"
+            );
+          }
+
+        } else if (
+          product.network.toLowerCase() === "airtel" &&
+          product.data === "1GB"
+        ) {
+          supplierName = "BBK";
+
+          const bbkResponse = await axios.post(
+            "https://www.bbkdata.com/api/data/",
+            {
+              network: 4,
+              mobile_number: cleanPhone,
+              plan: 341,
+              Ported_number: true
+            },
+            {
+              headers: {
+                "Authorization": `Token ${BBK_API_KEY}`,
+                "Content-Type": "application/json"
+              }
+            }
+          );
+
+          supplierData = bbkResponse.data;
+          console.log("BBK response:", JSON.stringify(supplierData));
+
+          if (
+            !supplierData ||
+            String(
+              supplierData.status ||
+              supplierData.Status ||
+              supplierData.success
+            ).toLowerCase() !== "success" &&
+            String(
+              supplierData.status ||
+              supplierData.Status ||
+              supplierData.success
+            ).toLowerCase() !== "successful" &&
+            supplierData.success !== true
+          ) {
+            throw new Error(
+              supplierData?.message ||
+              supplierData?.msg ||
+              "BBK did not confirm the Airtel 1GB order as successful"
+            );
+          }
+
+        } else if (
+          product.network.toLowerCase() === "glo" &&
+          product.data === "2.5GB"
+        ) {
+          supplierName = "Nata";
+
+          const nataReference = `NATA${orderId}${Date.now()}`.slice(-12);
+
+          const nataResponse = await axios.post(
+            `${NATA_BASE_URL}/buy-data`,
+            {
+              plan_id: 493,
+              category: "glo_sme",
+              phone: cleanPhone,
+              reference: nataReference
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": NATA_API_KEY
+              }
+            }
+          );
+
+          supplierData = nataResponse.data;
+          console.log("Nata response:", JSON.stringify(supplierData));
+
+          if (
+            !supplierData ||
+            String(supplierData.status || "").toLowerCase() !== "success"
+          ) {
+            throw new Error(
+              supplierData?.message ||
+              "Nata did not confirm the Glo 2.5GB order as successful"
+            );
+          }
+
+        } else if (product.network.toLowerCase() === "airtel") {
+          supplierName = "TeeTech";
+
+          const teetechReference = `ORDER-${orderId}-${Date.now()}`;
+
+          const supplierResponse = await axios.post(
+            "https://teetechglobaldata.com.ng/api/data",
+            {
+              network: "02",
+              phone: cleanPhone,
+              plan: product.plan_id,
+              ref: teetechReference
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "Token": TEETECH_API_KEY
+              }
+            }
+          );
+
+          supplierData = supplierResponse.data;
+
+          if (
+            !supplierData ||
+            String(supplierData.status || "").toLowerCase() !== "success" ||
+            String(supplierData.Status || "").toLowerCase() !== "successful"
+          ) {
+            throw new Error(
+              supplierData?.msg ||
+              "TeeTech did not confirm the order as successful"
+            );
+          }
+
+        } else {
           throw new Error(
-            supplierData?.message ||
-            "Mele Data did not confirm the order as successful"
+            `No supplier configured for ${product.network}`
           );
         }
 
@@ -1161,7 +1331,8 @@ app.post("/api/orders", requireUser, async (req, res) => {
         return res.status(201).json({
           status: "success",
           message: "Order successful",
-          order_id: orderId
+          order_id: orderId,
+          supplier: supplierName
         });
 
       } catch (supplierError) {
