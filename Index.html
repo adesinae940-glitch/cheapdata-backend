@@ -641,6 +641,13 @@ Buy Now
 
         <p id="walletMessage"></p>
 
+        <hr>
+
+        <h3>Transaction History</h3>
+        <div id="transactionList">
+            <p>No transactions yet.</p>
+        </div>
+
     </div>
 
 </section>
@@ -733,7 +740,58 @@ if (response.ok) {
     }
 }
 
+async function loadTransactions() {
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
 
+    const list = document.getElementById("transactionList");
+
+    if (!savedUser || !savedUser.id) {
+        list.innerHTML = "<p>Please login first.</p>";
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            "https://cheapdata-backend.onrender.com/api/wallet/transactions",
+            {
+                headers: {
+                    "Authorization": "Bearer " + savedUser.userToken
+                }
+            }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            list.innerHTML =
+                "<p>" + (result.message || "Unable to load transactions.") + "</p>";
+            return;
+        }
+
+        const transactions = result.transactions || [];
+
+        if (transactions.length === 0) {
+            list.innerHTML = "<p>No transactions yet.</p>";
+            return;
+        }
+
+        list.innerHTML = transactions.map(transaction => `
+            <div style="padding:10px 0; border-bottom:1px solid #ddd;">
+                <strong>${transaction.type}</strong>
+                <br>
+                ₦${Number(transaction.amount).toFixed(2)}
+                <br>
+                <small>${transaction.status} • ${transaction.reference}</small>
+            </div>
+        `).join("");
+
+    } catch (error) {
+        console.error(error);
+        list.innerHTML = "<p>Unable to load transactions.</p>";
+    }
+}
 async function fundWallet() {
     const savedUser = JSON.parse(
         localStorage.getItem("cheapDataUser") || "null"
@@ -808,6 +866,7 @@ function showPage(page) {
 
         if (page === "wallet") {
             loadWallet();
+            loadTransactions();
         }
     }
 }
@@ -1179,18 +1238,38 @@ async function verifyWalletPayment() {
         return;
     }
 
+    const savedUser = JSON.parse(
+        localStorage.getItem("cheapDataUser") || "null"
+    );
+
+    if (!savedUser || !savedUser.id || !savedUser.userToken) {
+        alert("Please login again to verify your wallet payment.");
+        return;
+    }
+
     try {
         const response = await fetch(
             "https://cheapdata-backend.onrender.com/api/wallet/verify/" +
-            encodeURIComponent(reference)
+            encodeURIComponent(reference),
+            {
+                headers: {
+                    "Authorization": "Bearer " + savedUser.userToken
+                }
+            }
         );
 
         const result = await response.json();
 
         if (result.status === "success") {
-alert("Wallet funded successfully!");
-await loadWallet();
-window.history.replaceState({}, document.title, window.location.pathname);
+            alert("Wallet funded successfully!");
+            await loadWallet();
+            await loadTransactions();
+
+            window.history.replaceState(
+                {},
+                document.title,
+                window.location.pathname
+            );
         } else {
             alert(result.message || "Payment verification failed.");
         }
