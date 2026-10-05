@@ -20,19 +20,6 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.get("/api/y3-test", async (req, res) => {
-  try {
-    const response = await axios.get(`${Y3_BASE_URL}/data/plans?network=GLO`, {
-      headers: { Authorization: `Bearer ${Y3_API_KEY}` }
-    });
-    res.json({ success: true, y3: response.data });
-  } catch (error) {
-    res.status(error.response?.status || 500).json({
-      success: false,
-      message: error.response?.data?.message || error.message
-    });
-  }
-});
 
 const PORT = process.env.PORT || 3000;
 const dbPath = path.join(__dirname, "cheapdata.db");
