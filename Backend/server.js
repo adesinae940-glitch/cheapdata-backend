@@ -1246,6 +1246,42 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
         } else if (
           product.network.toLowerCase() === "glo" &&
+          product.data === "1GB"
+        ) {
+          supplierName = "Y3";
+
+          const y3RequestId = `Y3-${orderId}-${Date.now()}`.slice(-12);
+
+          const y3Response = await axios.post(
+            `${Y3_BASE_URL}/data/purchase`,
+            {
+              network: "GLO",
+              plan_id: "glo_1gb_cg",
+              phone: cleanPhone,
+              request_id: y3RequestId
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Y3_API_KEY}`
+              }
+            }
+          );
+
+          supplierData = y3Response.data;
+          console.log("Y3 response:", JSON.stringify(supplierData));
+
+          if (
+            !supplierData ||
+            String(supplierData.status || "").toLowerCase() !== "success"
+          ) {
+            throw new Error(
+              supplierData?.message ||
+              "Y3 did not confirm the Glo 1GB order as successful"
+            );
+          }
+        } else if (
+          product.network.toLowerCase() === "glo" &&
           product.data === "2.5GB"
         ) {
           supplierName = "Nata";
