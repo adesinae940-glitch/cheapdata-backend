@@ -750,8 +750,9 @@ async function startServer() {
         const transactionResult = await pgPool.query(
           `SELECT id, user_id, amount, status
            FROM wallet_transactions
-           WHERE reference = $1`,
-          [reference]
+           WHERE reference = $1
+             AND user_id = $2`,
+          [reference, req.userId]
         );
 
         if (transactionResult.rows.length === 0) {
