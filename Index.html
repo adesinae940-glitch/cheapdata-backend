@@ -274,8 +274,7 @@ Home
 Login
 </button>
 
-Sign Up
-</button>
+<button onclick="showPage('signup')">Sign Up</button>
 
 <button onclick="showPage('dashboard')">
 Buy Data
@@ -288,7 +287,7 @@ Buy Data
     My Orders
 </button>
 
-<button id="adminButton" onclick="showPage('adminDashboard'); loadAdminOrders();" style="display:none;">
+<button onclick="showPage('terms')">Terms</button><button onclick="showPage('privacy')">Privacy</button><button id="adminButton" onclick="showPage('adminDashboard'); loadAdminOrders();" style="display:none;">
     Admin
 </button>
 </nav>
@@ -1116,13 +1115,21 @@ async function showOrders() {
         }
 
         orders.forEach(order => {
+            const status = String(order.status || "pending").toLowerCase();
+
             list.innerHTML += `
-                <div class="order-item">
-                    <p><strong>Network:</strong> ${order.network}</p>
-                    <p><strong>Bundle:</strong> ${order.data}</p>
+                <div class="order-card">
+                    <div class="order-card-top">
+                        <strong>${order.network} • ${order.data}</strong>
+                        <span class="status-badge status-${status}">
+                            ${status}
+                        </span>
+                    </div>
+
                     <p><strong>Phone:</strong> ${order.phone}</p>
-                    <p><strong>Amount:</strong> ₦${order.price}</p>
-                    <p><strong>Status:</strong> ${order.status}</p>
+                    <p><strong>Amount:</strong> ₦${Number(order.price || 0).toLocaleString()}</p>
+                    <p><strong>Order ID:</strong> #${order.id}</p>
+                    <p><strong>Date:</strong> ${order.created_at || order.date || "N/A"}</p>
                 </div>
             `;
         });
@@ -1195,15 +1202,29 @@ async function loadAdminOrders() {
         }
 
         container.innerHTML = result.orders.map(order =>`
-            <div style="background:white;padding:15px;margin-bottom:12px;border-radius:10px;">
-                <strong>Order #${order.id}</strong><br>
-                Customer: ${order.customer}<br>
-                Network: ${order.network}<br>
-                Data: ${order.data}<br>
-                Price: ₦${Number(order.price).toLocaleString()}<br>
-                Phone: ${order.phone}<br>
-                Status: <select onchange="updateOrderStatus(${order.id}, this.value)"><option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option><option value="processing" ${order.status === "processing" ? "selected" : ""}>Processing</option><option value="successful" ${order.status === "successful" ? "selected" : ""}>Successful</option><option value="failed" ${order.status === "failed" ? "selected" : ""}>Failed</option></select><br>
-                Date: ${order.date}
+            <div class="admin-order-card">
+                <div class="order-card-top">
+                    <strong>Order #${order.id}</strong>
+                    <span class="status-badge status-${String(order.status || "pending").toLowerCase()}">
+                        ${order.status}
+                    </span>
+                </div>
+
+                <p><strong>Customer:</strong> ${order.customer}</p>
+                <p><strong>Email:</strong> ${order.email || "N/A"}</p>
+                <p><strong>Network:</strong> ${order.network}</p>
+                <p><strong>Data:</strong> ${order.data}</p>
+                <p><strong>Price:</strong> ₦${Number(order.price || 0).toLocaleString()}</p>
+                <p><strong>Phone:</strong> ${order.phone}</p>
+                <p><strong>Date:</strong> ${order.date || "N/A"}</p>
+
+                <label><strong>Change Status</strong></label>
+                <select onchange="updateOrderStatus(${order.id}, this.value)">
+                    <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
+                    <option value="processing" ${order.status === "processing" ? "selected" : ""}>Processing</option>
+                    <option value="successful" ${order.status === "successful" ? "selected" : ""}>Successful</option>
+                    <option value="failed" ${order.status === "failed" ? "selected" : ""}>Failed</option>
+                </select>
             </div>
         `).join("");
 
@@ -1299,3 +1320,165 @@ verifyWalletPayment();
 </script>
 </body>
 </html> 
+
+<section id="terms" class="page">
+<div class="legal-box">
+<h2>Terms & Conditions</h2>
+<p>By using CheapData NG, you agree to these terms.</p>
+
+<h3>Data Purchases</h3>
+<p>Customers must provide the correct phone number, network and data bundle before confirming a purchase.</p>
+
+<h3>Payments</h3>
+<p>Wallet funding and data purchases are processed through the available payment and supplier systems.</p>
+
+<h3>Successful Orders</h3>
+<p>Once a data order is confirmed as successful, delivery is treated as completed.</p>
+
+<h3>Failed Orders</h3>
+<p>If an order fails after payment has been deducted, the system is designed to refund the order amount to the customer's wallet.</p>
+
+<h3>Customer Responsibility</h3>
+<p>Customers are responsible for keeping their account information secure and providing accurate order details.</p>
+
+<h3>Support</h3>
+<p>For assistance, contact CheapData NG through WhatsApp Support.</p>
+
+</div>
+</section>
+
+
+<section id="privacy" class="page">
+<div class="legal-box">
+<h2>Privacy Policy</h2>
+
+<p>CheapData NG respects your privacy and aims to protect the information you provide while using the service.</p>
+
+<h3>Information We Collect</h3>
+<p>We may collect information such as your name, email address, phone number, wallet activity and order details needed to provide the service.</p>
+
+<h3>How We Use Information</h3>
+<p>Your information may be used to manage your account, process data purchases, maintain wallet and order records, provide customer support and improve the service.</p>
+
+<h3>Security</h3>
+<p>We use reasonable technical measures to protect account and transaction information. Customers should also protect their passwords and login information.</p>
+
+<h3>Third-Party Services</h3>
+<p>Payment processors and data suppliers may process information required to complete transactions.</p>
+
+<h3>Contact</h3>
+<p>For privacy questions or account support, contact CheapData NG through WhatsApp Support.</p>
+
+</div>
+</section>
+
+
+<style>
+.legal-box{
+    max-width:850px;
+    margin:20px auto;
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,.07);
+}
+
+.legal-box h2{
+    color:#075e54;
+    margin-bottom:20px;
+}
+
+.legal-box h3{
+    color:#075e54;
+    margin-top:22px;
+    margin-bottom:8px;
+}
+
+.legal-box p{
+    line-height:1.6;
+    margin-bottom:10px;
+}
+
+@media(max-width:600px){
+    .legal-box{
+        padding:20px;
+    }
+}
+</style>
+
+
+<style>
+.order-card{
+    background:white;
+    padding:16px;
+    margin:12px 0;
+    border-radius:10px;
+    box-shadow:0 3px 12px rgba(0,0,0,.06);
+}
+
+.order-card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom:10px;
+}
+
+.order-card p{
+    margin:7px 0;
+}
+
+.status-badge{
+    display:inline-block;
+    padding:5px 9px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:bold;
+    text-transform:capitalize;
+}
+
+.status-pending{
+    background:#fff3cd;
+    color:#856404;
+}
+
+.status-processing{
+    background:#cfe2ff;
+    color:#084298;
+}
+
+.status-successful{
+    background:#d1e7dd;
+    color:#0f5132;
+}
+
+.status-failed{
+    background:#f8d7da;
+    color:#842029;
+}
+</style>
+
+
+<style>
+.admin-order-card{
+    background:white;
+    padding:16px;
+    margin:12px 0;
+    border-radius:10px;
+    box-shadow:0 3px 12px rgba(0,0,0,.06);
+}
+
+.admin-order-card p{
+    margin:7px 0;
+}
+
+.admin-order-card select{
+    width:100%;
+    padding:10px;
+    margin-top:8px;
+    border:1px solid #ddd;
+    border-radius:6px;
+    background:white;
+}
+</style>
+
