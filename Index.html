@@ -253,6 +253,26 @@ footer{
     cursor:pointer;
     color:#666;
 }
+
+/* PROFESSIONAL APP MODALS */
+.ui-overlay{display:none;position:fixed;inset:0;background:rgba(7,30,27,.62);backdrop-filter:blur(6px);z-index:20000;align-items:center;justify-content:center;padding:20px}
+.ui-overlay.show{display:flex}
+.ui-modal{width:100%;max-width:390px;background:#fff;border-radius:22px;padding:30px 24px;box-shadow:0 25px 70px rgba(0,0,0,.25);text-align:center;animation:uiPop .22s ease}
+.ui-icon{width:64px;height:64px;border-radius:50%;background:#e7f7f3;color:#075e54;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 15px;font-weight:bold}
+.ui-modal h3{font-size:22px;color:#172033;margin-bottom:8px}
+.ui-modal p{color:#667085;line-height:1.5;margin-bottom:20px}
+.ui-modal input{width:100%;padding:14px;border:1px solid #d8dee8;border-radius:12px;font-size:17px;text-align:center;outline:none}
+.ui-modal input:focus{border-color:#075e54;box-shadow:0 0 0 3px rgba(7,94,84,.1)}
+.ui-actions{display:flex;gap:10px;margin-top:16px}
+.ui-actions button{flex:1;padding:13px;border:0;border-radius:11px;font-weight:bold;cursor:pointer}
+.ui-cancel{background:#eef1f5;color:#475467}
+.ui-confirm{background:#075e54;color:#fff}
+.ui-success .ui-icon{background:#e8f8ef;color:#16a34a}
+.ui-success h3{color:#075e54}
+.ui-error .ui-icon{background:#fff0f0;color:#dc2626}
+.ui-error h3{color:#b42318}
+@keyframes uiPop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
 </style>
 </head>
 
@@ -911,11 +931,11 @@ async function signup(event) {
         const result = await response.json();
 
         if (!response.ok) {
-            alert(result.message || "Signup failed.");
+            uiAlert(result.message || "Signup failed.");
             return;
         }
 
-        alert("Account created successfully!");
+        uiAlert("Account created successfully!");
 
         document.getElementById("signupName").value = "";
         document.getElementById("signupEmail").value = "";
@@ -926,7 +946,7 @@ async function signup(event) {
 
     } catch (error) {
         console.error(error);
-        alert("Unable to connect to the server.");
+        uiAlert("Unable to connect to the server.");
     }
 }
 
@@ -952,7 +972,7 @@ async function login(event) {
         const result = await response.json();
 
         if (!response.ok) {
-            alert(result.message || "Login failed.");
+            uiAlert(result.message || "Login failed.");
             return;
         }
 
@@ -975,13 +995,13 @@ async function login(event) {
         document.getElementById("userWelcome").innerText =
             "Welcome, " + result.user.name + "!";
 
-        alert("Login successful!");
+        uiAlert("Login successful!");
 
 showPage("dashboard");
 
     } catch (error) {
         console.error(error);
-        alert("Unable to connect to the server.");
+        uiAlert("Unable to connect to the server.");
     }
 }
 let selectedNetwork = "";
@@ -995,7 +1015,7 @@ function buyData(network, bundle, price) {
     );
 
     if (!savedUser || !savedUser.id) {
-        alert("Please login first.");
+        uiAlert("Please login first.");
         showPage("login");
         return;
     }
@@ -1060,7 +1080,7 @@ async function confirmOrder() {
         let transactionPin = "";
 
         if (!pinStatus.has_pin) {
-            const newPin = prompt(
+            const newPin = await uiPrompt(
                 "Create your 4-6 digit transaction PIN:"
             );
 
@@ -1070,7 +1090,7 @@ async function confirmOrder() {
                 return;
             }
 
-            const confirmPin = prompt(
+            const confirmPin = await uiPrompt(
                 "Confirm your transaction PIN:"
             );
 
@@ -1106,7 +1126,7 @@ async function confirmOrder() {
 
             transactionPin = newPin;
         } else {
-            const pin = prompt("Enter your transaction PIN:");
+            const pin = await uiPrompt("Enter your transaction PIN:");
 
             if (!pin || !/^[0-9]{4,6}$/.test(pin)) {
                 message.innerText =
@@ -1172,7 +1192,7 @@ async function showOrders() {
     );
 
     if (!savedUser || !savedUser.id) {
-        alert("Please login first.");
+        uiAlert("Please login first.");
         showPage("login");
         return;
     }
@@ -1318,7 +1338,7 @@ async function loadAdminOrders() {
 async function updateOrderStatus(orderId, newStatus) {
     const savedUser = JSON.parse(localStorage.getItem("cheapDataUser"));
     if (!savedUser || !savedUser.adminToken) {
-        alert("Admin access required.");
+        uiAlert("Admin access required.");
         return;
     }
 
@@ -1335,14 +1355,14 @@ async function updateOrderStatus(orderId, newStatus) {
         const result = await response.json();
 
         if (result.status === "success") {
-            alert("Order status updated successfully.");
+            uiAlert("Order status updated successfully.");
             loadAdminOrders();
         } else {
-            alert(result.message || "Failed to update order status.");
+            uiAlert(result.message || "Failed to update order status.");
         }
     } catch (error) {
         console.error(error);
-        alert("Unable to update order status.");
+        uiAlert("Unable to update order status.");
     }
 }
 loadAdminOrders();
@@ -1361,7 +1381,7 @@ async function verifyWalletPayment() {
     );
 
     if (!savedUser || !savedUser.id || !savedUser.userToken) {
-        alert("Please login again to verify your wallet payment.");
+        uiAlert("Please login again to verify your wallet payment.");
         return;
     }
 
@@ -1379,7 +1399,7 @@ async function verifyWalletPayment() {
         const result = await response.json();
 
         if (result.status === "success") {
-            alert("Wallet funded successfully!");
+            uiAlert("Wallet funded successfully!");
             await loadWallet();
             await loadTransactions();
 
@@ -1389,17 +1409,76 @@ async function verifyWalletPayment() {
                 window.location.pathname
             );
         } else {
-            alert(result.message || "Payment verification failed.");
+            uiAlert(result.message || "Payment verification failed.");
         }
 
     } catch (error) {
         console.error(error);
-        alert("Unable to verify payment.");
+        uiAlert("Unable to verify payment.");
     }
 }
 
 verifyWalletPayment();
 </script>
+
+<div id="uiOverlay" class="ui-overlay">
+  <div id="uiModal" class="ui-modal">
+    <div id="uiIcon" class="ui-icon">OK</div>
+    <h3 id="uiTitle">Success</h3>
+    <p id="uiText"></p>
+    <div id="uiInputWrap" style="display:none">
+      <input id="uiInput" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+    </div>
+    <div class="ui-actions">
+      <button id="uiCancel" class="ui-cancel" onclick="uiClose()">Cancel</button>
+      <button id="uiConfirm" class="ui-confirm" onclick="uiConfirm()">Continue</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let uiResolve=null;
+
+function uiOpen(title,text,type="success",input=false){
+ const o=document.getElementById("uiOverlay");
+ const m=document.getElementById("uiModal");
+ document.getElementById("uiTitle").innerText=title;
+ document.getElementById("uiText").innerText=text;
+ document.getElementById("uiInputWrap").style.display=input?"block":"none";
+ document.getElementById("uiInput").value="";
+ document.getElementById("uiCancel").style.display=input?"block":"none";
+ document.getElementById("uiConfirm").innerText=input?"Continue":"Done";
+ document.getElementById("uiIcon").innerText=type==="error"?"ERROR":type==="success"?"OK":"INFO";
+ m.className="ui-modal "+(type==="error"?"ui-error":type==="success"?"ui-success":"");
+ o.classList.add("show");
+ if(input)setTimeout(()=>document.getElementById("uiInput").focus(),100);
+}
+
+function uiClose(v=null){
+ document.getElementById("uiOverlay").classList.remove("show");
+ if(uiResolve){
+   const r=uiResolve;
+   uiResolve=null;
+   r(v);
+ }
+}
+
+function uiConfirm(){
+ const input=document.getElementById("uiInputWrap").style.display!=="none";
+ uiClose(input?document.getElementById("uiInput").value:null);
+}
+
+function uiAlert(text,type="success",title=""){
+ uiOpen(title||(type==="error"?"Something went wrong":"Success"),text,type,false);
+ return new Promise(r=>{uiResolve=r});
+}
+
+function uiPrompt(text){
+ uiOpen("Transaction PIN",text,"info",true);
+ return new Promise(r=>{uiResolve=r});
+}
+</script>
+
 </body>
 </html> 
 
@@ -1486,6 +1565,26 @@ verifyWalletPayment();
         padding:20px;
     }
 }
+
+/* PROFESSIONAL APP MODALS */
+.ui-overlay{display:none;position:fixed;inset:0;background:rgba(7,30,27,.62);backdrop-filter:blur(6px);z-index:20000;align-items:center;justify-content:center;padding:20px}
+.ui-overlay.show{display:flex}
+.ui-modal{width:100%;max-width:390px;background:#fff;border-radius:22px;padding:30px 24px;box-shadow:0 25px 70px rgba(0,0,0,.25);text-align:center;animation:uiPop .22s ease}
+.ui-icon{width:64px;height:64px;border-radius:50%;background:#e7f7f3;color:#075e54;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 15px;font-weight:bold}
+.ui-modal h3{font-size:22px;color:#172033;margin-bottom:8px}
+.ui-modal p{color:#667085;line-height:1.5;margin-bottom:20px}
+.ui-modal input{width:100%;padding:14px;border:1px solid #d8dee8;border-radius:12px;font-size:17px;text-align:center;outline:none}
+.ui-modal input:focus{border-color:#075e54;box-shadow:0 0 0 3px rgba(7,94,84,.1)}
+.ui-actions{display:flex;gap:10px;margin-top:16px}
+.ui-actions button{flex:1;padding:13px;border:0;border-radius:11px;font-weight:bold;cursor:pointer}
+.ui-cancel{background:#eef1f5;color:#475467}
+.ui-confirm{background:#075e54;color:#fff}
+.ui-success .ui-icon{background:#e8f8ef;color:#16a34a}
+.ui-success h3{color:#075e54}
+.ui-error .ui-icon{background:#fff0f0;color:#dc2626}
+.ui-error h3{color:#b42318}
+@keyframes uiPop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
 </style>
 
 
@@ -1538,6 +1637,26 @@ verifyWalletPayment();
     background:#f8d7da;
     color:#842029;
 }
+
+/* PROFESSIONAL APP MODALS */
+.ui-overlay{display:none;position:fixed;inset:0;background:rgba(7,30,27,.62);backdrop-filter:blur(6px);z-index:20000;align-items:center;justify-content:center;padding:20px}
+.ui-overlay.show{display:flex}
+.ui-modal{width:100%;max-width:390px;background:#fff;border-radius:22px;padding:30px 24px;box-shadow:0 25px 70px rgba(0,0,0,.25);text-align:center;animation:uiPop .22s ease}
+.ui-icon{width:64px;height:64px;border-radius:50%;background:#e7f7f3;color:#075e54;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 15px;font-weight:bold}
+.ui-modal h3{font-size:22px;color:#172033;margin-bottom:8px}
+.ui-modal p{color:#667085;line-height:1.5;margin-bottom:20px}
+.ui-modal input{width:100%;padding:14px;border:1px solid #d8dee8;border-radius:12px;font-size:17px;text-align:center;outline:none}
+.ui-modal input:focus{border-color:#075e54;box-shadow:0 0 0 3px rgba(7,94,84,.1)}
+.ui-actions{display:flex;gap:10px;margin-top:16px}
+.ui-actions button{flex:1;padding:13px;border:0;border-radius:11px;font-weight:bold;cursor:pointer}
+.ui-cancel{background:#eef1f5;color:#475467}
+.ui-confirm{background:#075e54;color:#fff}
+.ui-success .ui-icon{background:#e8f8ef;color:#16a34a}
+.ui-success h3{color:#075e54}
+.ui-error .ui-icon{background:#fff0f0;color:#dc2626}
+.ui-error h3{color:#b42318}
+@keyframes uiPop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
 </style>
 
 
@@ -1562,5 +1681,25 @@ verifyWalletPayment();
     border-radius:6px;
     background:white;
 }
+
+/* PROFESSIONAL APP MODALS */
+.ui-overlay{display:none;position:fixed;inset:0;background:rgba(7,30,27,.62);backdrop-filter:blur(6px);z-index:20000;align-items:center;justify-content:center;padding:20px}
+.ui-overlay.show{display:flex}
+.ui-modal{width:100%;max-width:390px;background:#fff;border-radius:22px;padding:30px 24px;box-shadow:0 25px 70px rgba(0,0,0,.25);text-align:center;animation:uiPop .22s ease}
+.ui-icon{width:64px;height:64px;border-radius:50%;background:#e7f7f3;color:#075e54;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 15px;font-weight:bold}
+.ui-modal h3{font-size:22px;color:#172033;margin-bottom:8px}
+.ui-modal p{color:#667085;line-height:1.5;margin-bottom:20px}
+.ui-modal input{width:100%;padding:14px;border:1px solid #d8dee8;border-radius:12px;font-size:17px;text-align:center;outline:none}
+.ui-modal input:focus{border-color:#075e54;box-shadow:0 0 0 3px rgba(7,94,84,.1)}
+.ui-actions{display:flex;gap:10px;margin-top:16px}
+.ui-actions button{flex:1;padding:13px;border:0;border-radius:11px;font-weight:bold;cursor:pointer}
+.ui-cancel{background:#eef1f5;color:#475467}
+.ui-confirm{background:#075e54;color:#fff}
+.ui-success .ui-icon{background:#e8f8ef;color:#16a34a}
+.ui-success h3{color:#075e54}
+.ui-error .ui-icon{background:#fff0f0;color:#dc2626}
+.ui-error h3{color:#b42318}
+@keyframes uiPop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
 </style>
 
