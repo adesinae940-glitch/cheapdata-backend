@@ -1123,7 +1123,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
         "glo|1GB": {
           network: "glo",
           data: "1GB",
-          price: 350,
+          price: 300,
           plan_id: 862
         },
         "glo|2GB": {
@@ -1131,6 +1131,24 @@ app.post("/api/orders", requireUser, async (req, res) => {
           data: "2GB",
           price: 650,
           plan_id: 493
+        },
+        "9mobile|500MB": {
+          network: "9mobile",
+          data: "500MB",
+          price: 240,
+          plan_id: "9mobile_500mb_cg"
+        },
+        "9mobile|1GB": {
+          network: "9mobile",
+          data: "1GB",
+          price: 320,
+          plan_id: "9mobile_1gb_cg"
+        },
+        "9mobile|2GB": {
+          network: "9mobile",
+          data: "2GB",
+          price: 540,
+          plan_id: "9mobile_2gb_cg"
         }
       };
 
