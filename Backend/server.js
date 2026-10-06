@@ -515,7 +515,7 @@ async function startServer() {
   // =========================
   // ADMIN AUTHORIZATION
   // =========================
-  function requireAdmin(req, res, next) {
+  async function requireAdmin(req, res, next) {
     try {
       const authHeader = req.headers.authorization;
 
@@ -536,17 +536,23 @@ async function startServer() {
         });
       }
 
-      const result = db.exec(
+      if (!pgPool) {
+        return res.status(500).json({
+          status: "error",
+          message: "PostgreSQL is not configured"
+        });
+      }
+
+      const result = await pgPool.query(
         `SELECT is_admin
          FROM users
-         WHERE id = ?`,
+         WHERE id = $1`,
         [userId]
       );
 
       if (
-        result.length === 0 ||
-        result[0].values.length === 0 ||
-        Number(result[0].values[0][0]) !== 1
+        result.rows.length === 0 ||
+        Number(result.rows[0].is_admin) !== 1
       ) {
         return res.status(403).json({
           status: "error",
@@ -554,7 +560,7 @@ async function startServer() {
         });
       }
 
-      req.adminUserId = userId;
+      req.adminUserId = Number(userId);
 
       next();
 
