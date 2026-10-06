@@ -296,6 +296,20 @@ async function startServer() {
   saveDatabase();
 
   // =========================
+  // TRANSACTION PIN MIGRATION
+  // =========================
+  try {
+    await pgPool.query(`
+      ALTER TABLE users
+      ADD COLUMN transaction_pin TEXT
+    `);
+  } catch (error) {
+    if (error.code !== "42701") {
+      console.error("Transaction PIN migration error:", error);
+    }
+  }
+
+  // =========================
   // SIGN UP
   // =========================
 
@@ -436,6 +450,68 @@ async function startServer() {
   });
 
   // =========================
+  // =========================
+  // TRANSACTION PIN
+  // =========================
+
+  app.get("/api/transaction-pin/status", requireUser, async (req, res) => {
+    try {
+      const result = await pgPool.query(
+        "SELECT transaction_pin FROM users WHERE id = $1",
+        [req.userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "User not found"
+        });
+      }
+
+      res.json({
+        status: "success",
+        has_pin: !!result.rows[0].transaction_pin
+      });
+    } catch (error) {
+      console.error("Transaction PIN status error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Unable to check transaction PIN"
+      });
+    }
+  });
+
+  app.post("/api/transaction-pin/set", requireUser, async (req, res) => {
+    try {
+      const pin = String(req.body.pin || "").trim();
+
+      if (!/^\d{4,6}$/.test(pin)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Transaction PIN must contain 4 to 6 digits"
+        });
+      }
+
+      const hashedPin = await bcrypt.hash(pin, 10);
+
+      await pgPool.query(
+        "UPDATE users SET transaction_pin = $1 WHERE id = $2",
+        [hashedPin, req.userId]
+      );
+
+      res.json({
+        status: "success",
+        message: "Transaction PIN created successfully"
+      });
+    } catch (error) {
+      console.error("Transaction PIN set error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Unable to create transaction PIN"
+      });
+    }
+  });
+
   // =========================
   // ADMIN AUTHORIZATION
   // =========================
@@ -965,11 +1041,46 @@ app.post("/api/orders", requireUser, async (req, res) => {
       }
 
       const cleanPhone = String(phone).trim();
+      const transactionPin = String(req.body.transaction_pin || "").trim();
 
       if (!/^\d{11}$/.test(cleanPhone)) {
         return res.status(400).json({
           status: "error",
           message: "Phone number must be exactly 11 digits"
+        });
+      }
+
+      if (!/^\d{4,6}$/.test(transactionPin)) {
+        return res.status(400).json({
+          status: "error",
+          message: "A 4 to 6 digit transaction PIN is required"
+        });
+      }
+
+      const pinResult = await pgPool.query(
+        "SELECT transaction_pin FROM users WHERE id = $1",
+        [userId]
+      );
+
+      if (
+        pinResult.rows.length === 0 ||
+        !pinResult.rows[0].transaction_pin
+      ) {
+        return res.status(400).json({
+          status: "error",
+          message: "Transaction PIN has not been created yet"
+        });
+      }
+
+      const pinMatch = await bcrypt.compare(
+        transactionPin,
+        pinResult.rows[0].transaction_pin
+      );
+
+      if (!pinMatch) {
+        return res.status(401).json({
+          status: "error",
+          message: "Incorrect transaction PIN"
         });
       }
 
@@ -980,32 +1091,32 @@ app.post("/api/orders", requireUser, async (req, res) => {
         "mtn|500MB": {
           network: "mtn",
           data: "500MB",
-          price: 350,
+          price: 240,
           plan_id: 456
         },
         "mtn|1GB": {
           network: "mtn",
           data: "1GB",
-          price: 500,
+          price: 370,
           plan_id: 454
         },
         "mtn|2GB": {
           network: "mtn",
           data: "2GB",
-          price: 900,
+          price: 640,
           plan_id: 531
         },
 
         "airtel|1GB": {
           network: "airtel",
           data: "1GB",
-          price: 450,
+          price: 395,
           plan_id: 528
         },
         "airtel|2GB": {
           network: "airtel",
           data: "2GB",
-          price: 700,
+          price: 690,
           plan_id: 454
 
         },
@@ -1015,10 +1126,10 @@ app.post("/api/orders", requireUser, async (req, res) => {
           price: 350,
           plan_id: 862
         },
-        "glo|2.5GB": {
+        "glo|2GB": {
           network: "glo",
-          data: "2.5GB",
-          price: 600,
+          data: "2GB",
+          price: 650,
           plan_id: 493
         }
       };
@@ -1131,135 +1242,40 @@ app.post("/api/orders", requireUser, async (req, res) => {
         let supplierName;
 
         if (product.network.toLowerCase() === "mtn") {
-          supplierName = "Mele";
+          const y3PlanIds = {
+            "mtn|500MB": "mtn_500mb_sme",
+            "mtn|1GB": "mtn_1gb_sme",
+            "mtn|2GB": "mtn_2gb_sme",
+            "airtel|1GB": "airtel_1gb_cg",
+            "airtel|2GB": "airtel_2gb_cg",
+            "glo|1GB": "glo_1gb_cg",
+            "glo|2GB": "glo_2gb_cg",
+            "9mobile|500MB": "9mobile_500mb_cg",
+            "9mobile|1GB": "9mobile_1gb_cg",
+            "9mobile|2GB": "9mobile_2gb_cg"
+          };
 
-          const meleReference = `DEV_DATA_${orderId}_${Date.now()}`;
+          const y3Key =
+            `${product.network.toLowerCase()}|${product.data}`;
 
-          const supplierResponse = await axios.post(
-            `${MELE_BASE_URL}/data/purchase`,
-            {
-              network: "MTN",
-              phone_number: cleanPhone,
-              plan_id: product.plan_id,
-              reference: meleReference
-            },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${MELE_API_KEY}`
-              }
-            }
-          );
+          const y3PlanId = y3PlanIds[y3Key];
 
-          supplierData = supplierResponse.data;
-
-          if (
-            !supplierData ||
-            supplierData.status !== true ||
-            String(supplierData.data?.status || "").toLowerCase() !== "success"
-          ) {
+          if (!y3PlanId) {
             throw new Error(
-              supplierData?.message ||
-              "Mele Data did not confirm the order as successful"
+              `Y3 does not have a ${product.network} ${product.data} plan`
             );
           }
 
-        } else if (
-          product.network.toLowerCase() === "airtel" &&
-          product.data === "2GB"
-        ) {
-          supplierName = "Nata";
-
-          const nataReference = `NATA${orderId}${Date.now()}`.slice(-12);
-
-          const nataResponse = await axios.post(
-            `${NATA_BASE_URL}/buy-data`,
-            {
-              plan_id: 145,
-              category: "airtel_gifting",
-              phone: cleanPhone,
-              reference: nataReference
-            },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": NATA_API_KEY
-              }
-            }
-          );
-
-          supplierData = nataResponse.data;
-          console.log("Nata response:", JSON.stringify(supplierData));
-
-          if (
-            !supplierData ||
-            String(supplierData.status || "").toLowerCase() !== "success"
-          ) {
-            throw new Error(
-              supplierData?.message ||
-              "Nata did not confirm the Airtel 2GB order as successful"
-            );
-          }
-
-        } else if (
-          product.network.toLowerCase() === "airtel" &&
-          product.data === "1GB"
-        ) {
-          supplierName = "BBK";
-
-          const bbkResponse = await axios.post(
-            "https://www.bbkdata.com/api/data/",
-            {
-              network: 4,
-              mobile_number: cleanPhone,
-              plan: 341,
-              Ported_number: true
-            },
-            {
-              headers: {
-                "Authorization": `Token ${BBK_API_KEY}`,
-                "Content-Type": "application/json"
-              }
-            }
-          );
-
-          supplierData = bbkResponse.data;
-          console.log("BBK response:", JSON.stringify(supplierData));
-
-          if (
-            !supplierData ||
-            String(
-              supplierData.status ||
-              supplierData.Status ||
-              supplierData.success
-            ).toLowerCase() !== "success" &&
-            String(
-              supplierData.status ||
-              supplierData.Status ||
-              supplierData.success
-            ).toLowerCase() !== "successful" &&
-            supplierData.success !== true
-          ) {
-            throw new Error(
-              supplierData?.message ||
-              supplierData?.msg ||
-              "BBK did not confirm the Airtel 1GB order as successful"
-            );
-          }
-
-        } else if (
-          product.network.toLowerCase() === "glo" &&
-          product.data === "1GB"
-        ) {
           supplierName = "Y3";
 
-          const y3RequestId = `Y3-${orderId}-${Date.now()}`.slice(-12);
+          const y3RequestId =
+            `Y3-${orderId}-${Date.now()}`.slice(-30);
 
           const y3Response = await axios.post(
             `${Y3_BASE_URL}/data/purchase`,
             {
-              network: "GLO",
-              plan_id: "glo_1gb_cg",
+              network: product.network.toUpperCase(),
+              plan_id: y3PlanId,
               phone: cleanPhone,
               request_id: y3RequestId
             },
@@ -1272,7 +1288,11 @@ app.post("/api/orders", requireUser, async (req, res) => {
           );
 
           supplierData = y3Response.data;
-          console.log("Y3 response:", JSON.stringify(supplierData));
+
+          console.log(
+            "Y3 response:",
+            JSON.stringify(supplierData)
+          );
 
           if (
             !supplierData ||
@@ -1280,87 +1300,17 @@ app.post("/api/orders", requireUser, async (req, res) => {
           ) {
             throw new Error(
               supplierData?.message ||
-              "Y3 did not confirm the Glo 1GB order as successful"
-            );
-          }
-        } else if (
-          product.network.toLowerCase() === "glo" &&
-          product.data === "2.5GB"
-        ) {
-          supplierName = "Nata";
-
-          const nataReference = `NATA${orderId}${Date.now()}`.slice(-12);
-
-          const nataResponse = await axios.post(
-            `${NATA_BASE_URL}/buy-data`,
-            {
-              plan_id: 493,
-              category: "glo_sme",
-              phone: cleanPhone,
-              reference: nataReference
-            },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": NATA_API_KEY
-              }
-            }
-          );
-
-          supplierData = nataResponse.data;
-          console.log("Nata response:", JSON.stringify(supplierData));
-
-          if (
-            !supplierData ||
-            String(supplierData.status || "").toLowerCase() !== "success"
-          ) {
-            throw new Error(
-              supplierData?.message ||
-              "Nata did not confirm the Glo 2.5GB order as successful"
-            );
-          }
-
-        } else if (product.network.toLowerCase() === "airtel") {
-          supplierName = "TeeTech";
-
-          const teetechReference = `ORDER-${orderId}-${Date.now()}`;
-
-          const supplierResponse = await axios.post(
-            "https://teetechglobaldata.com.ng/api/data",
-            {
-              network: "02",
-              phone: cleanPhone,
-              plan: product.plan_id,
-              ref: teetechReference
-            },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "Token": TEETECH_API_KEY
-              }
-            }
-          );
-
-          supplierData = supplierResponse.data;
-
-          if (
-            !supplierData ||
-            String(supplierData.status || "").toLowerCase() !== "success" ||
-            String(supplierData.Status || "").toLowerCase() !== "successful"
-          ) {
-            throw new Error(
-              supplierData?.msg ||
-              "TeeTech did not confirm the order as successful"
+              "Y3 did not confirm the order as successful"
             );
           }
 
         } else {
           throw new Error(
-            `No supplier configured for ${product.network}`
+            `No Y3 plan configured for ${product.network} ${product.data}`
           );
         }
 
-        await pgPool.query(
+                await pgPool.query(
           `UPDATE orders
            SET status = $1
            WHERE id = $2`,

@@ -448,7 +448,7 @@ Select your network and data bundle below.
 
 <button
 class="buy-btn"
-onclick="buyData('MTN','500MB',350)">
+onclick="buyData('MTN','500MB',240)">
 Buy Now
 </button>
 
@@ -462,7 +462,7 @@ Buy Now
 
 <button
 class="buy-btn"
-onclick="buyData('MTN','1GB',500)">
+onclick="buyData('MTN','1GB',370)">
 Buy Now
 </button>
 
@@ -476,7 +476,7 @@ Buy Now
 
 <button
 class="buy-btn"
-onclick="buyData('MTN','2GB',900)">
+onclick="buyData('MTN','2GB',640)">
 Buy Now
 </button>
 
@@ -501,7 +501,7 @@ Buy Now
 
 <button
 class="buy-btn"
-onclick="buyData('Airtel','1GB',450)">
+onclick="buyData('Airtel','1GB',395)">
 Buy Now
 </button>
 
@@ -515,7 +515,7 @@ Buy Now
 
 <button
 class="buy-btn"
-onclick="buyData('Airtel','2GB',700)">
+onclick="buyData('Airtel','2GB',690)">
 Buy Now
 </button>
 
@@ -546,13 +546,13 @@ Buy Now
 
 <div class="data-card">
 
-<strong>2.5GB</strong>
+<strong>2GB</strong>
 
 ₦600
 
 <button
 class="buy-btn"
-onclick="buyData('Glo','2.5GB',600)">
+onclick="buyData('Glo','2GB',650)">
 Buy Now
 </button>
 
@@ -1037,24 +1037,106 @@ async function confirmOrder() {
         return;
     }
 
-    message.innerText = "Processing order...";
-
     try {
+        message.innerText = "Checking transaction PIN...";
 
-        const response = await fetch("https://cheapdata-backend.onrender.com/api/orders", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + savedUser.userToken
-            },
-            body: JSON.stringify({
-                user_id: savedUser.id,
-                network: selectedNetwork,
-                data: selectedBundle,
-                price: selectedPrice,
-                phone: phone
-            })
-        });
+        const pinStatusResponse = await fetch(
+            "https://cheapdata-backend.onrender.com/api/transaction-pin/status",
+            {
+                headers: {
+                    "Authorization": "Bearer " + savedUser.userToken
+                }
+            }
+        );
+
+        const pinStatus = await pinStatusResponse.json();
+
+        if (!pinStatusResponse.ok) {
+            message.innerText =
+                pinStatus.message || "Unable to check transaction PIN.";
+            return;
+        }
+
+        let transactionPin = "";
+
+        if (!pinStatus.has_pin) {
+            const newPin = prompt(
+                "Create your 4-6 digit transaction PIN:"
+            );
+
+            if (!newPin || !/^[0-9]{4,6}$/.test(newPin)) {
+                message.innerText =
+                    "Transaction PIN must contain 4 to 6 digits.";
+                return;
+            }
+
+            const confirmPin = prompt(
+                "Confirm your transaction PIN:"
+            );
+
+            if (newPin !== confirmPin) {
+                message.innerText =
+                    "Transaction PINs do not match.";
+                return;
+            }
+
+            message.innerText = "Creating transaction PIN...";
+
+            const setPinResponse = await fetch(
+                "https://cheapdata-backend.onrender.com/api/transaction-pin/set",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + savedUser.userToken
+                    },
+                    body: JSON.stringify({
+                        pin: newPin
+                    })
+                }
+            );
+
+            const setPinResult = await setPinResponse.json();
+
+            if (!setPinResponse.ok) {
+                message.innerText =
+                    setPinResult.message || "Unable to create PIN.";
+                return;
+            }
+
+            transactionPin = newPin;
+        } else {
+            const pin = prompt("Enter your transaction PIN:");
+
+            if (!pin || !/^[0-9]{4,6}$/.test(pin)) {
+                message.innerText =
+                    "Enter your 4-6 digit transaction PIN.";
+                return;
+            }
+
+            transactionPin = pin;
+        }
+
+        message.innerText = "Processing order...";
+
+        const response = await fetch(
+            "https://cheapdata-backend.onrender.com/api/orders",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + savedUser.userToken
+                },
+                body: JSON.stringify({
+                    user_id: savedUser.id,
+                    network: selectedNetwork,
+                    data: selectedBundle,
+                    price: selectedPrice,
+                    phone: phone,
+                    transaction_pin: transactionPin
+                })
+            }
+        );
 
         const result = await response.json();
 
