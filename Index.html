@@ -1145,16 +1145,15 @@ async function confirmOrder() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": "Bearer " + savedUser.userToken
-                },
-                body: JSON.stringify({
-                    user_id: savedUser.id,
-                    network: selectedNetwork,
-                    data: selectedBundle,
-                    price: selectedPrice,
-                    phone: phone,
-                    transaction_pin: transactionPin
-                })
+"Authorization": "Bearer " + savedUser.userToken
+},
+body: JSON.stringify({
+    network: selectedNetwork,
+    data: selectedBundle,
+    price: selectedPrice,
+    phone: phone,
+    transaction_pin: transactionPin
+})
             }
         );
 
