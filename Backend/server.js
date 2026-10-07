@@ -1265,7 +1265,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
         let supplierData;
         let supplierName;
 
-        if (product.network.toLowerCase() === "mtn") {
+        {
           const y3PlanIds = {
             "mtn|500MB": "mtn_500mb_sme",
             "mtn|1GB": "mtn_1gb_sme",
@@ -1328,13 +1328,9 @@ app.post("/api/orders", requireUser, async (req, res) => {
             );
           }
 
-        } else {
-          throw new Error(
-            `No Y3 plan configured for ${product.network} ${product.data}`
-          );
         }
 
-                await pgPool.query(
+        await pgPool.query(
           `UPDATE orders
            SET status = $1
            WHERE id = $2`,
