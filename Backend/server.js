@@ -7,15 +7,7 @@ const initSqlJs = require("sql.js");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const axios = require("axios");
-const { Pool } = require("pg");
-
-const pgPool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
-    })
-  : null;
-
+let pgPool = null;
 const app = express();
 
 app.use(cors());
@@ -196,6 +188,54 @@ function verifyUserToken(token) {
 
 let db;
 
+
+function createSqlitePgCompat(database) {
+  async function query(sql, params = []) {
+    let i = 0;
+
+    const normalized = String(sql)
+      .replace(/FOR\\s+UPDATE/gi, "")
+      .replace(/\\$(\\d+)/g, (_, n) => {
+        return "?";
+      });
+
+    const ordered = [];
+    const matches = String(sql).match(/\\$(\\d+)/g) || [];
+    for (const m of matches) {
+      ordered.push(params[Number(m.slice(1)) - 1]);
+    }
+
+    const stmt = database.prepare(normalized);
+
+    try {
+      stmt.bind(ordered);
+      const rows = [];
+
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
+      }
+
+      return {
+        rows,
+        rowCount: database.getRowsModified()
+      };
+    } finally {
+      stmt.free();
+    }
+  }
+
+  return {
+    query,
+    async connect() {
+      return {
+        query,
+        release() {}
+      };
+    }
+  };
+}
+
+
 async function startServer() {
   const SQL = await initSqlJs();
 
@@ -208,6 +248,17 @@ async function startServer() {
   }
 
   // =========================
+  try {
+    db.run(`
+      ALTER TABLE users
+      ADD COLUMN transaction_pin TEXT
+    `);
+  } catch (error) {
+    // Column already exists
+  }
+
+  pgPool = createSqlitePgCompat(db);
+
   // USERS TABLE
   // =========================
 
@@ -297,19 +348,6 @@ async function startServer() {
 
   // =========================
   // TRANSACTION PIN MIGRATION
-  // =========================
-  try {
-    await pgPool.query(`
-      ALTER TABLE users
-      ADD COLUMN transaction_pin TEXT
-    `);
-  } catch (error) {
-    if (error.code !== "42701") {
-      console.error("Transaction PIN migration error:", error);
-    }
-  }
-
-  // =========================
   // SIGN UP
   // =========================
 
