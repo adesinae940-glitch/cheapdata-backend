@@ -191,19 +191,12 @@ let db;
 
 function createSqlitePgCompat(database) {
   async function query(sql, params = []) {
-    let i = 0;
-
     const normalized = String(sql)
       .replace(/FOR\\s+UPDATE/gi, "")
-      .replace(/\$(\d+)/g, (_, n) => {
-        return "?";
-      });
+      .replace(/\\$(\\d+)/g, "?");
 
-    const ordered = [];
-    const matches = String(sql).match(/\$(\d+)/g) || [];
-    for (const m of matches) {
-      ordered.push(params[Number(m.slice(1)) - 1]);
-    }
+    const matches = String(sql).match(/\\$(\\d+)/g) || [];
+    const ordered = matches.map((m) => params[Number(m.slice(1)) - 1]);
 
     const stmt = database.prepare(normalized);
 
@@ -234,7 +227,6 @@ function createSqlitePgCompat(database) {
     }
   };
 }
-
 
 async function startServer() {
   const SQL = await initSqlJs();
