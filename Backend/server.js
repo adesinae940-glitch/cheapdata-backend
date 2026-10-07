@@ -195,12 +195,12 @@ function createSqlitePgCompat(database) {
 
     const normalized = String(sql)
       .replace(/FOR\\s+UPDATE/gi, "")
-      .replace(/\\$(\\d+)/g, (_, n) => {
+      .replace(/\$(\d+)/g, (_, n) => {
         return "?";
       });
 
     const ordered = [];
-    const matches = String(sql).match(/\\$(\\d+)/g) || [];
+    const matches = String(sql).match(/\$(\d+)/g) || [];
     for (const m of matches) {
       ordered.push(params[Number(m.slice(1)) - 1]);
     }
