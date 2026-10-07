@@ -191,19 +191,17 @@ let db;
 
 function createSqlitePgCompat(database) {
   async function query(sql, params = []) {
-    const normalized = String(sql)
+    const text = String(sql);
+    const normalized = text
       .replace(/FOR\\s+UPDATE/gi, "")
-      .replace(/\\$(\\d+)/g, "?");
-
-    const matches = String(sql).match(/\\$(\\d+)/g) || [];
-    const ordered = matches.map((m) => params[Number(m.slice(1)) - 1]);
+      .replace(/\\$\\d+/g, "?");
 
     const stmt = database.prepare(normalized);
 
     try {
-      stmt.bind(ordered);
-      const rows = [];
+      stmt.bind(params);
 
+      const rows = [];
       while (stmt.step()) {
         rows.push(stmt.getAsObject());
       }
