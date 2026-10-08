@@ -227,6 +227,8 @@ function createSqlitePgCompat(database) {
 }
 
 async function startServer() {
+  // TEMP ADMIN ID1 PROMOTION
+  try { db.run("UPDATE users SET is_admin = 1 WHERE id = ?", [1]); saveDatabase(); } catch (e) {}
   const SQL = await initSqlJs();
 
   // Load existing database
