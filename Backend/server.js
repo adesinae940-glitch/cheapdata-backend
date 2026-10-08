@@ -1597,6 +1597,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
 // ERICODATA TRANSACTIONS TEST
 // =========================
   db.run("UPDATE users SET is_admin = 1 WHERE email = ?", ["adesinamayowaenterprise@gmail.com"]); saveDatabase();
+app.get("/api/admin-repair-users",async(req,res)=>{try{if(req.headers["x-admin-repair-key"]!==process.env.ADMIN_RESET_PASSWORD)return res.status(403).json({status:"error",message:"Forbidden"});const r=await pgPool.query("SELECT id,name,email,phone,is_admin FROM users");res.json({status:"success",users:r.rows});}catch(e){res.status(500).json({status:"error",message:"Failed"});}});
 app.post("/api/admin-repair", async (req,res)=>{try{if(req.headers["x-admin-repair-key"]!==process.env.ADMIN_RESET_PASSWORD)return res.status(403).json({status:"error",message:"Forbidden"});const email="adesinamayowaenterprise@gmail.com";const password=process.env.ADMIN_RESET_PASSWORD;if(!password)return res.status(500).json({status:"error",message:"Reset password not configured"});const hash=await bcrypt.hash(password,10);const result=await pgPool.query("UPDATE users SET password=$1,is_admin=1 WHERE email=$2",[hash,email]);saveDatabase();res.json({status:"success",message:"Admin account restored",updated:result.rowCount});}catch(e){console.error(e);res.status(500).json({status:"error",message:"Repair failed"});}});
 app.listen(PORT, "0.0.0.0", () => {
   console.log(
