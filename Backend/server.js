@@ -237,16 +237,6 @@ async function startServer() {
     db = new SQL.Database();
   }
 
-  // =========================
-  try {
-    db.run(`
-      ALTER TABLE users
-      ADD COLUMN transaction_pin TEXT
-    `);
-  } catch (error) {
-    // Column already exists
-  }
-
   pgPool = createSqlitePgCompat(db);
 
   // USERS TABLE
@@ -476,6 +466,13 @@ async function startServer() {
       });
     }
   });
+
+  // Ensure transaction PIN column exists after users table is created
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN transaction_pin TEXT`);
+  } catch (error) {
+    // Column already exists
+  }
 
   // =========================
   // =========================
