@@ -193,8 +193,8 @@ function createSqlitePgCompat(database) {
   async function query(sql, params = []) {
     const text = String(sql);
     const normalized = text
-      .replace(/FOR\\s+UPDATE/gi, "")
-      .replace(/\\$\\d+/g, "?");
+      .replace(/FOR\s+UPDATE/gi, "")
+      .replace(/\$(\d+)/g, "?");
 
     const stmt = database.prepare(normalized);
 
