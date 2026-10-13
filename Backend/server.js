@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const path = require("path");
-const initSqlJs = require("sql.js");
+const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const axios = require("axios");
@@ -14,7 +14,6 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const dbPath = path.join(__dirname, "cheapdata.db");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const ERICODATA_API_KEY = process.env.ERICODATA_API_KEY;
@@ -186,150 +185,73 @@ function verifyUserToken(token) {
   }
 }
 
-let db;
-
-
-function createSqlitePgCompat(database) {
-  async function query(sql, params = []) {
-    const text = String(sql);
-    const normalized = text
-      .replace(/FOR\s+UPDATE/gi, "")
-      .replace(/\$(\d+)/g, "?");
-
-    const stmt = database.prepare(normalized);
-
-    try {
-      stmt.bind(params);
-
-      const rows = [];
-      while (stmt.step()) {
-        rows.push(stmt.getAsObject());
-      }
-
-      return {
-        rows,
-        rowCount: database.getRowsModified()
-      };
-    } finally {
-      stmt.free();
-    }
-  }
-
-  return {
-    query,
-    async connect() {
-      return {
-        query,
-        release() {}
-      };
-    }
-  };
-}
-
 async function startServer() {
-  const SQL = await initSqlJs();
-
-  // Load existing database
-  if (fs.existsSync(dbPath)) {
-    const file = fs.readFileSync(dbPath);
-    db = new SQL.Database(file);
-  } else {
-    db = new SQL.Database();
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not set");
   }
 
-  pgPool = createSqlitePgCompat(db);
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: 5
+  });
 
-  // USERS TABLE
-  // =========================
+  await pgPool.query("SELECT 1");
 
-  db.run(`
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id BIGSERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       phone TEXT NOT NULL,
       password TEXT NOT NULL,
-      wallet_balance REAL NOT NULL DEFAULT 0
+      wallet_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      transaction_pin TEXT
     )
   `);
+  await pgPool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_balance NUMERIC(12,2) NOT NULL DEFAULT 0");
+  await pgPool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER NOT NULL DEFAULT 0");
+  await pgPool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS transaction_pin TEXT");
 
-  try {
-    db.run(`
-      ALTER TABLE users
-      ADD COLUMN wallet_balance REAL NOT NULL DEFAULT 0
-    `);
-  } catch (error) {
-    // Column already exists
-  }
-  try {
-    db.run(`
-      ALTER TABLE users
-      ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0
-    `);
-  } catch (error) {
-    // Column already exists
-  }
-  // =========================
-  // ADMIN PASSWORD MIGRATION
-  // =========================
-
-  if (process.env.ADMIN_PASSWORD_HASH) {
-    const admin = db.exec(
-      `SELECT id FROM users WHERE id = ? AND is_admin = 1`,
-      [5]
-    );
-
-    if (admin.length > 0 && admin[0].values.length > 0) {
-      db.run(
-        `UPDATE users SET password = ? WHERE id = ?`,
-        [process.env.ADMIN_PASSWORD_HASH, 5]
-      );
-      saveDatabase();
-      console.log("Admin password migration applied");
-    }
-  }
-
-  // =========================
-  // ORDERS TABLE
-  // =========================
-
-  db.run(`
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id),
       network TEXT NOT NULL,
       data TEXT NOT NULL,
       price INTEGER NOT NULL,
       phone TEXT NOT NULL,
-      status TEXT DEFAULT "pending",
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  // =========================
-  // WALLET TRANSACTIONS
-  // =========================
-
-  db.run(`
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS wallet_transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id),
       type TEXT NOT NULL,
-      amount REAL NOT NULL,
+      amount NUMERIC(12,2) NOT NULL,
       status TEXT NOT NULL,
       reference TEXT UNIQUE NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  saveDatabase();
-
-  // =========================
-  // TRANSACTION PIN MIGRATION
-  // SIGN UP
-  // =========================
+  if (process.env.ADMIN_PASSWORD_HASH) {
+    const admin = await pgPool.query(
+      "SELECT id FROM users WHERE id = $1 AND is_admin = 1",
+      [5]
+    );
+    if (admin.rowCount > 0) {
+      await pgPool.query(
+        "UPDATE users SET password = $1 WHERE id = $2",
+        [process.env.ADMIN_PASSWORD_HASH, 5]
+      );
+      console.log("Admin password migration applied");
+    }
+  }
 
   app.post("/api/signup", async (req, res) => {
     try {
@@ -466,18 +388,6 @@ async function startServer() {
       });
     }
   });
-
-  // Ensure transaction PIN column exists after users table is created
-  try {
-    db.run(`ALTER TABLE users ADD COLUMN transaction_pin TEXT`);
-  } catch (error) {
-    // Column already exists
-  }
-
-  // =========================
-  // =========================
-  // TRANSACTION PIN
-  // =========================
 
   app.get("/api/transaction-pin/status", requireUser, async (req, res) => {
     try {
@@ -1347,10 +1257,62 @@ app.post("/api/orders", requireUser, async (req, res) => {
             !supplierData ||
             String(supplierData.status || "").toLowerCase() !== "success"
           ) {
-            throw new Error(
-              supplierData?.message ||
-              "Y3 did not confirm the order as successful"
+            const e = new Error(
+              supplierData?.message || "Y3 purchase not confirmed"
             );
+            e.orderPending = true;
+            throw e;
+          }
+
+          if (
+            !supplierData.transaction_id ||
+            supplierData.request_id !== y3RequestId
+          ) {
+            const e = new Error("Y3 purchase reference is not confirmed");
+            e.orderPending = true;
+            throw e;
+          }
+
+          try {
+            const check = await axios.get(
+              `${Y3_BASE_URL}/transactions/${encodeURIComponent(y3RequestId)}`,
+              {
+                headers: {
+                  "Authorization": `Bearer ${Y3_API_KEY}`,
+                  "Accept": "application/json"
+                },
+                timeout: 15000
+              }
+            );
+
+            const tx = check.data?.data;
+
+            if (tx?.request_id !== y3RequestId) {
+              const e = new Error("Y3 transaction reference mismatch");
+              e.orderPending = true;
+              throw e;
+            }
+
+            const finalStatus = String(tx.status || "").toUpperCase();
+
+            if (finalStatus === "FAILED" || finalStatus === "FAILURE") {
+              const e = new Error("Y3 confirmed purchase failure");
+              e.confirmedFailure = true;
+              throw e;
+            }
+
+            if (finalStatus !== "SUCCESS") {
+              const e = new Error("Y3 transaction is still pending");
+              e.orderPending = true;
+              throw e;
+            }
+          } catch (e) {
+            if (e.confirmedFailure || e.orderPending) throw e;
+            const pendingError = new Error(
+              "Unable to verify Y3 yet; transaction needs checking"
+            );
+            pendingError.orderPending = true;
+            throw pendingError;
           }
 
         }
@@ -1372,10 +1334,24 @@ app.post("/api/orders", requireUser, async (req, res) => {
       } catch (supplierError) {
 
         console.error(
-          "Mele order error:",
+          "Y3 order error:",
           supplierError.response?.data ||
           supplierError.message
         );
+
+        if (supplierError.orderPending) {
+          await pgPool.query(
+            "UPDATE orders SET status = $1 WHERE id = $2",
+            ["pending", orderId]
+          );
+
+          return res.status(202).json({
+            status: "pending",
+            message: "Supplier confirmation is pending. Do not repeat this purchase yet.",
+            order_id: orderId,
+            supplier: "Y3"
+          });
+        }
 
         const refundClient = await pgPool.connect();
 
@@ -1469,102 +1445,62 @@ app.post("/api/orders", requireUser, async (req, res) => {
   // =========================
 
 
-  app.get("/api/admin/orders", requireAdmin, (req, res) => {
+  app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     try {
-
-      const result = db.exec(`
-        SELECT
-          orders.id,
-          orders.user_id,
-          users.name,
-          users.email,
-          orders.network,
-          orders.data,
-          orders.price,
-          orders.phone,
-          orders.status,
-          orders.created_at
+      const result = await pgPool.query(`
+        SELECT orders.id, orders.user_id, users.name, users.email,
+               orders.network, orders.data, orders.price, orders.phone,
+               orders.status, orders.created_at
         FROM orders
         JOIN users ON users.id = orders.user_id
         ORDER BY orders.id DESC
       `);
-
-      const orders = [];
-
-      if (result.length > 0) {
-        result[0].values.forEach(row => {
-          orders.push({
-            id: row[0],
-            user_id: row[1],
-            customer: row[2],
-            email: row[3],
-            network: row[4],
-            data: row[5],
-            price: row[6],
-            phone: row[7],
-            status: row[8],
-            date: row[9]
-          });
-        });
-      }
-
-      res.json({
-        status: "success",
-        orders
-      });
-
+      const orders = result.rows.map(row => ({
+        id: row.id,
+        user_id: row.user_id,
+        customer: row.name,
+        email: row.email,
+        network: row.network,
+        data: row.data,
+        price: Number(row.price),
+        phone: row.phone,
+        status: row.status,
+        date: row.created_at
+      }));
+      res.json({ status: "success", orders });
     } catch (error) {
-      console.error("Admin orders error:", error);
-
-      res.status(500).json({
-        status: "error",
-        message: "Server error"
-      });
+      console.error("Admin orders PostgreSQL error:", error);
+      res.status(500).json({ status: "error", message: "Server error" });
     }
   });
-  // =========================
-  app.put("/api/admin/orders/:id/status", requireAdmin, (req, res) => {
+
+  app.put("/api/admin/orders/:id/status", requireAdmin, async (req, res) => {
     try {
       const orderId = Number(req.params.id);
       const { status } = req.body;
+      const allowedStatuses = ["pending", "processing", "successful", "failed"];
 
-      const allowedStatuses = [
-        "pending",
-        "processing",
-        "successful",
-        "failed"
-      ];
-
+      if (!Number.isSafeInteger(orderId) || orderId <= 0) {
+        return res.status(400).json({ status: "error", message: "Invalid order ID" });
+      }
       if (!allowedStatuses.includes(status)) {
-        return res.status(400).json({
-          status: "error",
-          message: "Invalid order status"
-        });
+        return res.status(400).json({ status: "error", message: "Invalid order status" });
       }
 
-      db.run(
-        `UPDATE orders
-         SET status = ?
-         WHERE id = ?`,
+      const result = await pgPool.query(
+        "UPDATE orders SET status = $1 WHERE id = $2",
         [status, orderId]
       );
-
-      saveDatabase();
-
-      res.json({
-        status: "success",
-        message: "Order status updated"
-      });
-
+      if (result.rowCount === 0) {
+        return res.status(404).json({ status: "error", message: "Order not found" });
+      }
+      res.json({ status: "success", message: "Order status updated" });
     } catch (error) {
-      console.error("Admin status update error:", error);
-
-      res.status(500).json({
-        status: "error",
-        message: "Server error"
-      });
+      console.error("Admin status PostgreSQL error:", error);
+      res.status(500).json({ status: "error", message: "Server error" });
     }
-  });  
+  });
+
 // WEBSITE
   // =========================
 
@@ -1599,13 +1535,7 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 }
 
-function saveDatabase() {
-  fs.writeFileSync(
-    dbPath,
-    Buffer.from(db.export())
-  );
-}
-
-startServer();
-
-
+startServer().catch(error => {
+  console.error("CheapData startup failed:", error.message);
+  process.exit(1);
+});
