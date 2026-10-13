@@ -1445,6 +1445,37 @@ app.post("/api/orders", requireUser, async (req, res) => {
   // =========================
 
 
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const result = await pgPool.query(`
+        SELECT id, name, email, phone, wallet_balance, is_admin
+        FROM users
+        ORDER BY id DESC
+      `);
+
+      const users = result.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        wallet_balance: Number(row.wallet_balance || 0),
+        is_admin: Number(row.is_admin) === 1
+      }));
+
+      res.json({
+        status: "success",
+        total: users.length,
+        users
+      });
+    } catch (error) {
+      console.error("Admin users PostgreSQL error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Unable to load users"
+      });
+    }
+  });
+
   app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     try {
       const result = await pgPool.query(`
