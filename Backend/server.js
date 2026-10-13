@@ -227,6 +227,8 @@ async function startServer() {
     )
   `);
 
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS supplier_cost NUMERIC(12,2)");
+
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS wallet_transactions (
       id BIGSERIAL PRIMARY KEY,
@@ -1199,6 +1201,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
       try {
         let supplierData;
         let supplierName;
+        let supplierCost;
 
         {
           const y3PlanIds = {
@@ -1224,6 +1227,39 @@ app.post("/api/orders", requireUser, async (req, res) => {
               `Y3 does not have a ${product.network} ${product.data} plan`
             );
           }
+
+          const y3PlansResponse = await axios.get(
+            `${Y3_BASE_URL}/data/plans`,
+            {
+              headers: {
+                "Authorization": `Bearer ${Y3_API_KEY}`,
+                "Accept": "application/json"
+              },
+              timeout: 20000
+            }
+          );
+
+          const y3Plans =
+            y3PlansResponse.data?.plans ||
+            y3PlansResponse.data?.data?.plans;
+
+          const matchedY3Plan = Array.isArray(y3Plans)
+            ? y3Plans.find(plan => String(plan.id) === y3PlanId)
+            : null;
+
+          if (
+            !matchedY3Plan ||
+            matchedY3Plan.price === undefined ||
+            matchedY3Plan.price === null ||
+            !Number.isFinite(Number(matchedY3Plan.price)) ||
+            Number(matchedY3Plan.price) < 0
+          ) {
+            throw new Error(
+              `Could not verify supplier cost for Y3 plan ${y3PlanId}`
+            );
+          }
+
+          supplierCost = Number(matchedY3Plan.price);
 
           supplierName = "Y3";
 
@@ -1319,9 +1355,9 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
         await pgPool.query(
           `UPDATE orders
-           SET status = $1
-           WHERE id = $2`,
-          ["successful", orderId]
+           SET status = $1, supplier_cost = $2
+           WHERE id = $3`,
+          ["successful", supplierCost, orderId]
         );
 
         return res.status(201).json({
@@ -1472,6 +1508,51 @@ app.post("/api/orders", requireUser, async (req, res) => {
       res.status(500).json({
         status: "error",
         message: "Unable to load users"
+      });
+    }
+  });
+
+
+  // ADMIN PROFIT REPORT
+  app.get("/api/admin/profit", requireAdmin, async (req, res) => {
+    try {
+      const result = await pgPool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'successful') AS successful_orders,
+          COALESCE(SUM(price) FILTER (WHERE status = 'successful'), 0) AS total_sales,
+          COUNT(*) FILTER (
+            WHERE status = 'successful' AND supplier_cost IS NOT NULL
+          ) AS orders_with_recorded_cost,
+          COUNT(*) FILTER (
+            WHERE status = 'successful' AND supplier_cost IS NULL
+          ) AS orders_missing_supplier_cost,
+          COALESCE(SUM(supplier_cost) FILTER (
+            WHERE status = 'successful' AND supplier_cost IS NOT NULL
+          ), 0) AS recorded_supplier_cost,
+          COALESCE(SUM(price - supplier_cost) FILTER (
+            WHERE status = 'successful' AND supplier_cost IS NOT NULL
+          ), 0) AS profit_on_orders_with_recorded_cost
+        FROM orders
+      `);
+
+      const row = result.rows[0];
+      res.json({
+        status: "success",
+        report: {
+          successful_orders: Number(row.successful_orders || 0),
+          total_sales: Number(row.total_sales || 0),
+          orders_with_recorded_cost: Number(row.orders_with_recorded_cost || 0),
+          orders_missing_supplier_cost: Number(row.orders_missing_supplier_cost || 0),
+          recorded_supplier_cost: Number(row.recorded_supplier_cost || 0),
+          profit_on_orders_with_recorded_cost: Number(row.profit_on_orders_with_recorded_cost || 0),
+          note: "Profit covers only successful orders with a recorded supplier cost. Missing costs must be recorded before total actual profit can be known."
+        }
+      });
+    } catch (error) {
+      console.error("Admin profit report error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Unable to load profit report"
       });
     }
   });

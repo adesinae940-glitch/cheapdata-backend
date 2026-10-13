@@ -307,7 +307,7 @@ Buy Data
     My Orders
 </button>
 
-<button onclick="showPage('terms')">Terms</button><button onclick="showPage('privacy')">Privacy</button><button id="adminButton" onclick="showPage('adminDashboard'); loadAdminOrders(); loadAdminUsers();" style="display:none;">
+<button onclick="showPage('terms')">Terms</button><button onclick="showPage('privacy')">Privacy</button><button id="adminButton" onclick="showPage('adminDashboard'); loadAdminOrders(); loadAdminUsers(); loadAdminProfit();" style="display:none;">
     Admin
 </button>
 </nav>
@@ -1264,6 +1264,31 @@ window.onload = function() {
         <p>Manage customer orders</p>
     </div>
 
+    <div class="welcome">
+        <h2>Profit Report</h2>
+        <p>Successful orders with verified supplier costs</p>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0;">
+        <div class="admin-order-card" style="flex:1;min-width:145px;">
+            <p>Total Sales</p><h3 id="profitSales">Loading...</h3>
+        </div>
+        <div class="admin-order-card" style="flex:1;min-width:145px;">
+            <p>Recorded Supplier Costs</p><h3 id="profitCosts">Loading...</h3>
+        </div>
+        <div class="admin-order-card" style="flex:1;min-width:145px;">
+            <p>Profit on Orders with Recorded Costs</p><h3 id="profitAmount">Loading...</h3>
+        </div>
+        <div class="admin-order-card" style="flex:1;min-width:145px;">
+            <p>Successful Orders Missing Cost</p><h3 id="profitMissing">Loading...</h3>
+        </div>
+    </div>
+    <p id="profitNote" style="font-size:13px;color:#555;">Loading profit report...</p>
+    <button type="button" onclick="loadAdminProfit()"
+        style="padding:12px 16px;margin:8px 0 20px;border:0;border-radius:8px;background:#075e54;color:white;">
+        Refresh Profit Report
+    </button>
+
     <div id="adminOrders">
         <p>Loading orders...</p>
     </div>
@@ -1292,6 +1317,54 @@ window.onload = function() {
 
 </section>
 <script>
+function formatProfitNaira(value) {
+    return "₦" + Number(value || 0).toLocaleString("en-NG", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+async function loadAdminProfit() {
+    const savedUser = JSON.parse(localStorage.getItem("cheapDataUser") || "null");
+    const note = document.getElementById("profitNote");
+
+    if (!savedUser || !savedUser.adminToken) {
+        note.textContent = "Admin access required. Please log in again.";
+        return;
+    }
+
+    note.textContent = "Loading profit report...";
+    try {
+        const response = await fetch("https://cheapdata-backend.onrender.com/api/admin/profit", {
+            headers: {
+                "Authorization": "Bearer " + savedUser.adminToken
+            }
+        });
+        const result = await response.json();
+
+        if (!response.ok || result.status !== "success" || !result.report) {
+            throw new Error(result.message || "Unable to load profit report.");
+        }
+
+        const report = result.report;
+        document.getElementById("profitSales").textContent =
+            formatProfitNaira(report.total_sales);
+        document.getElementById("profitCosts").textContent =
+            formatProfitNaira(report.recorded_supplier_cost);
+        document.getElementById("profitAmount").textContent =
+            formatProfitNaira(report.profit_on_orders_with_recorded_cost);
+        document.getElementById("profitMissing").textContent =
+            String(report.orders_missing_supplier_cost);
+        note.textContent =
+            "Successful orders: " + report.successful_orders +
+            ". Orders with recorded costs: " + report.orders_with_recorded_cost +
+            ". " + (report.note || "");
+    } catch (error) {
+        console.error("Admin profit report error:", error);
+        note.textContent = error.message || "Unable to load profit report.";
+    }
+}
+
 function renderAdminUsers() {
     const container = document.getElementById("adminUsers");
     const search = (document.getElementById("adminUserSearch")?.value || "").trim().toLowerCase();
