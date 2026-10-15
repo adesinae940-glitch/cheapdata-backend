@@ -859,19 +859,35 @@ async function startServer() {
             });
           }
 
-          await client.query(
+          if (lockResult.rows[0].status !== "pending") {
+            await client.query("ROLLBACK");
+            return res.status(409).json({
+              status: "error",
+              message: "Transaction is not pending and cannot be credited again"
+            });
+          }
+
+          const walletUpdate = await client.query(
             `UPDATE users
              SET wallet_balance = wallet_balance + $1
              WHERE id = $2`,
             [expectedAmount, userId]
           );
 
-          await client.query(
+          if (walletUpdate.rowCount !== 1) {
+            throw new Error("Wallet credit failed: user row was not updated");
+          }
+
+          const paymentUpdate = await client.query(
             `UPDATE wallet_transactions
              SET status = $1
              WHERE id = $2`,
             ["success", transactionId]
           );
+
+          if (paymentUpdate.rowCount !== 1) {
+            throw new Error("Payment status update failed");
+          }
 
           await client.query("COMMIT");
         } catch (dbError) {
