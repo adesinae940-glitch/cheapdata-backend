@@ -1267,12 +1267,16 @@ throw new Error("Y3_API_KEY is missing");
 
         orderId = orderResult.rows[0].id;
 
-        await client.query(
+        const walletDeduction = await client.query(
           `UPDATE users
            SET wallet_balance = wallet_balance - $1
            WHERE id = $2`,
           [product.price, userId]
         );
+
+        if (walletDeduction.rowCount !== 1) {
+          throw new Error("Wallet deduction did not update exactly one user");
+        }
 
         await client.query("COMMIT");
       } catch (dbError) {
@@ -1387,7 +1391,8 @@ throw new Error("Y3_API_KEY is missing");
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${Y3_API_KEY}`
-              }
+              },
+              timeout: 20000
             }
           );
 
@@ -1492,7 +1497,7 @@ throw new Error("Y3_API_KEY is missing");
 
         if (supplierError.orderPending || (y3PurchaseAttempted && !supplierError.confirmedFailure)) {
           await pgPool.query(
-            "UPDATE orders SET status = $1 WHERE id = $2",
+            "UPDATE orders SET status = $1 WHERE id = $2 AND status IN ('pending', 'processing')",
             ["pending", orderId]
           );
 
