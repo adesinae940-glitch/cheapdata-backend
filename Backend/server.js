@@ -1699,7 +1699,8 @@ throw new Error("Y3_API_KEY is missing");
       const result = await pgPool.query(`
         SELECT orders.id, orders.user_id, users.name, users.email,
                orders.network, orders.data, orders.price, orders.phone,
-               orders.status, orders.created_at
+               orders.status, orders.created_at,
+               orders.supplier_cost, orders.y3_request_id
         FROM orders
         JOIN users ON users.id = orders.user_id
         ORDER BY orders.id DESC
@@ -1712,6 +1713,8 @@ throw new Error("Y3_API_KEY is missing");
         network: row.network,
         data: row.data,
         price: Number(row.price),
+        supplier_cost: row.supplier_cost === null ? null : Number(row.supplier_cost),
+        y3_request_id: row.y3_request_id,
         phone: row.phone,
         status: row.status,
         date: row.created_at
