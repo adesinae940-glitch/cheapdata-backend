@@ -1462,12 +1462,18 @@ throw new Error("Y3_API_KEY is missing");
 
         }
 
-        await pgPool.query(
+        const successUpdate = await pgPool.query(
           `UPDATE orders
            SET status = $1, supplier_cost = $2
-           WHERE id = $3`,
+           WHERE id = $3 AND status IN ('pending', 'processing')`,
           ["successful", supplierCost, orderId]
         );
+
+        if (successUpdate.rowCount !== 1) {
+          throw new Error(
+            `Order ${orderId} was not marked successful exactly once`
+          );
+        }
 
         return res.status(201).json({
           status: "success",
@@ -1504,19 +1510,27 @@ throw new Error("Y3_API_KEY is missing");
         try {
           await refundClient.query("BEGIN");
 
-          await refundClient.query(
+          const refundWallet = await refundClient.query(
             `UPDATE users
              SET wallet_balance = wallet_balance + $1
              WHERE id = $2`,
             [product.price, userId]
           );
 
-          await refundClient.query(
+          if (refundWallet.rowCount !== 1) {
+            throw new Error("Refund failed: customer wallet was not updated");
+          }
+
+          const failedOrder = await refundClient.query(
             `UPDATE orders
              SET status = $1
-             WHERE id = $2`,
+             WHERE id = $2 AND status IN ('pending', 'processing')`,
             ["failed", orderId]
           );
+
+          if (failedOrder.rowCount !== 1) {
+            throw new Error("Refund failed: order was not marked failed exactly once");
+          }
 
           await refundClient.query("COMMIT");
           refundSucceeded = true;
