@@ -22,11 +22,23 @@ const TEETECH_API_KEY = process.env.TEETECH_API_KEY;
 const BBK_API_KEY = process.env.BBK_API_KEY;
 const NATA_API_KEY = process.env.NATA_API_KEY;
 const NATA_BASE_URL = "https://api.nata.ng/api";
-const Y3_API_KEY = process.env.Y3_API_KEY;
-const Y3_BASE_URL = "https://y3data.com/api/v1";
+const VTUSHARE_BASE_URL = "https://vtushare.com.ng/api";
+const VTUSHARE_EMAIL = process.env.VTUSHARE_EMAIL;
+const VTUSHARE_PASSWORD = process.env.VTUSHARE_PASSWORD;
 const MELE_BASE_URL = "https://meledata.ng/api/v1/developer";
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
 const USER_TOKEN_SECRET = process.env.USER_TOKEN_SECRET;
+
+// VTUShare Basic Authentication
+function getVTUShareAuth() {
+  if (!VTUSHARE_EMAIL || !VTUSHARE_PASSWORD) {
+    throw new Error("VTUShare credentials are not configured");
+  }
+
+  return Buffer
+    .from(`${VTUSHARE_EMAIL}:${VTUSHARE_PASSWORD}`)
+    .toString("base64");
+}
 
 
 // =========================
@@ -228,7 +240,9 @@ async function startServer() {
   `);
 
   await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS supplier_cost NUMERIC(12,2)");
-  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS y3_request_id TEXT");
+
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS supplier_name TEXT");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS supplier_reference TEXT");
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS wallet_transactions (
@@ -1052,20 +1066,24 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "mtn",
           data: "500MB",
           price: 240,
-          plan_id: 456
+          plan_id: 744
         },
         "mtn|1GB": {
           network: "mtn",
           data: "1GB",
           price: 370,
-          plan_id: 454
+          plan_id: 752
         },
         "mtn|2GB": {
           network: "mtn",
           data: "2GB",
           price: 640,
-          plan_id: 531
+          plan_id: 753
         },
+        "mtn|3GB": { network: "mtn", data: "3GB", price: 910, plan_id: 754 },
+        "mtn|5GB": { network: "mtn", data: "5GB", price: 1450, plan_id: 755 },
+        "mtn|10GB": { network: "mtn", data: "10GB", price: 2800, plan_id: 756 },
+        "mtn|15GB": { network: "mtn", data: "15GB", price: 4100, plan_id: 757 },
 
         "airtel|1GB": {
           network: "airtel",
@@ -1102,14 +1120,17 @@ app.post("/api/orders", requireUser, async (req, res) => {
           network: "9mobile",
           data: "1GB",
           price: 320,
-          plan_id: "9mobile_1gb_cg"
+          plan_id: 733
         },
         "9mobile|2GB": {
           network: "9mobile",
           data: "2GB",
           price: 540,
-          plan_id: "9mobile_2gb_cg"
-        }
+          plan_id: 734
+        },
+        "9mobile|3GB": { network: "9mobile", data: "3GB", price: 550, plan_id: 735 },
+        "9mobile|5GB": { network: "9mobile", data: "5GB", price: 850, plan_id: 737 },
+        "9mobile|10GB": { network: "9mobile", data: "10GB", price: 1600, plan_id: 738 }
       };
 
       const product = PRODUCTS[productKey];
@@ -1128,72 +1149,28 @@ app.post("/api/orders", requireUser, async (req, res) => {
         });
       }
 
-      // LIVE_Y3_PRICE_BEFORE_WALLET_CHECK
-try {
-if (!Y3_API_KEY) {
-throw new Error("Y3_API_KEY is missing");
-}
+      // VTUSHARE AVAILABILITY CHECK
+      const vtushareProducts = new Set([
+        "mtn|500MB",
+        "mtn|1GB",
+        "mtn|2GB",
+        "mtn|3GB",
+        "mtn|5GB",
+        "mtn|10GB",
+        "mtn|15GB",
+        "9mobile|1GB",
+        "9mobile|2GB",
+        "9mobile|3GB",
+        "9mobile|5GB",
+        "9mobile|10GB"
+      ]);
 
-    const pricePlanIds = {
-      "mtn|500MB": "mtn_500mb_sme",
-      "mtn|1GB": "mtn_1gb_sme",
-      "mtn|2GB": "mtn_2gb_sme",
-      "airtel|1GB": "airtel_1gb_cg",
-      "airtel|2GB": "airtel_2gb_cg",
-      "glo|1GB": "glo_1gb_cg",
-      "glo|2GB": "glo_2gb_cg",
-      "9mobile|500MB": "9mobile_500mb_cg",
-      "9mobile|1GB": "9mobile_1gb_cg",
-      "9mobile|2GB": "9mobile_2gb_cg"
-    };
-
-    const pricePlanId = pricePlanIds[productKey];
-    if (!pricePlanId) {
-      throw new Error("No supplier plan mapping for " + productKey);
-    }
-
-    const priceResponse = await axios.get(
-      Y3_BASE_URL + "/data/plans",
-      {
-        headers: {
-          Authorization: "Bearer " + Y3_API_KEY,
-          Accept: "application/json"
-        },
-        timeout: 20000
+      if (!vtushareProducts.has(productKey)) {
+        return res.status(400).json({
+          status: "error",
+          message: "This data plan is currently unavailable"
+        });
       }
-    );
-
-    const pricePlans =
-      priceResponse.data?.plans ||
-      priceResponse.data?.data?.plans;
-
-    const livePricePlan = Array.isArray(pricePlans)
-      ? pricePlans.find(p => String(p.id) === pricePlanId)
-      : null;
-
-    if (
-      !livePricePlan ||
-      livePricePlan.price === undefined ||
-      livePricePlan.price === null ||
-      !Number.isFinite(Number(livePricePlan.price)) ||
-      Number(livePricePlan.price) < 0
-    ) {
-      throw new Error("Could not verify current supplier price");
-    }
-
-    product.price = productKey === "glo|1GB"
-      ? 300
-      : Number(livePricePlan.price) + 100;
-  } catch (priceError) {
-    console.error(
-      "Pre-charge Y3 pricing error:",
-      priceError.response?.data || priceError.message
-    );
-    return res.status(502).json({
-      status: "error",
-      message: "Unable to verify current data price. No wallet deduction was made."
-    });
-  }
 
       const userResult = await pgPool.query(
         `SELECT wallet_balance
@@ -1286,216 +1263,131 @@ throw new Error("Y3_API_KEY is missing");
         client.release();
       }
 
-      let y3PurchaseAttempted = false;
+      let vtusharePurchaseAttempted = false;
 
       try {
         let supplierData;
-        let supplierName;
+        const supplierName = "VTUShare";
         let supplierCost;
+        let supplierReference = null;
 
-        {
-          const y3PlanIds = {
-            "mtn|500MB": "mtn_500mb_sme",
-            "mtn|1GB": "mtn_1gb_sme",
-            "mtn|2GB": "mtn_2gb_sme",
-            "airtel|1GB": "airtel_1gb_cg",
-            "airtel|2GB": "airtel_2gb_cg",
-            "glo|1GB": "glo_1gb_cg",
-            "glo|2GB": "glo_2gb_cg",
-            "9mobile|500MB": "9mobile_500mb_cg",
-            "9mobile|1GB": "9mobile_1gb_cg",
-            "9mobile|2GB": "9mobile_2gb_cg"
-          };
+        const vtusharePlans = {
+          "mtn|500MB": { bundle: 744, network: 2, type: 12, cost: 140 },
+          "mtn|1GB": { bundle: 752, network: 2, type: 12, cost: 270 },
+          "mtn|2GB": { bundle: 753, network: 2, type: 12, cost: 540 },
+          "mtn|3GB": { bundle: 754, network: 2, type: 12, cost: 810 },
+          "mtn|5GB": { bundle: 755, network: 2, type: 12, cost: 1350 },
+          "mtn|10GB": { bundle: 756, network: 2, type: 12, cost: 2700 },
+          "mtn|15GB": { bundle: 757, network: 2, type: 12, cost: 4000 },
+          "9mobile|1GB": { bundle: 733, network: 5, type: 10, cost: 150 },
+          "9mobile|2GB": { bundle: 734, network: 5, type: 10, cost: 300 },
+          "9mobile|3GB": { bundle: 735, network: 5, type: 10, cost: 450 },
+          "9mobile|5GB": { bundle: 737, network: 5, type: 10, cost: 750 },
+          "9mobile|10GB": { bundle: 738, network: 5, type: 10, cost: 1500 }
+        };
 
-          const y3Key =
-            `${product.network.toLowerCase()}|${product.data}`;
+        const plan = vtusharePlans[productKey];
 
-          const y3PlanId = y3PlanIds[y3Key];
+        if (!plan) {
+          throw new Error("VTUShare plan mapping not found");
+        }
 
-          if (!y3PlanId) {
-            throw new Error(
-              `Y3 does not have a ${product.network} ${product.data} plan`
-            );
-          }
+        supplierCost = plan.cost;
 
-          const y3PlansResponse = await axios.get(
-            `${Y3_BASE_URL}/data/plans`,
-            {
-              headers: {
-                "Authorization": `Bearer ${Y3_API_KEY}`,
-                "Accept": "application/json"
-              },
-              timeout: 20000
-            }
-          );
+        const authHeader = `Basic ${getVTUShareAuth()}`;
 
-          const y3Plans =
-            y3PlansResponse.data?.plans ||
-            y3PlansResponse.data?.data?.plans;
+        const savedSupplier = await pgPool.query(
+          `UPDATE orders
+           SET supplier_name = $1, supplier_cost = $2
+           WHERE id = $3 AND status IN ('pending', 'processing')`,
+          [supplierName, supplierCost, orderId]
+        );
 
-          const matchedY3Plan = Array.isArray(y3Plans)
-            ? y3Plans.find(plan => String(plan.id) === y3PlanId)
-            : null;
+        if (savedSupplier.rowCount !== 1) {
+          throw new Error("Could not save supplier details");
+        }
 
-          if (
-            !matchedY3Plan ||
-            matchedY3Plan.price === undefined ||
-            matchedY3Plan.price === null ||
-            !Number.isFinite(Number(matchedY3Plan.price)) ||
-            Number(matchedY3Plan.price) < 0
-          ) {
-            throw new Error(
-              `Could not verify supplier cost for Y3 plan ${y3PlanId}`
-            );
-          }
+        vtusharePurchaseAttempted = true;
 
-          supplierCost = Number(matchedY3Plan.price);
-
-          supplierName = "Y3";
-
-          const y3RequestId =
-            `Y3-${orderId}-${Date.now()}`.slice(-30);
-
-
-          const refUpdate = await pgPool.query(
-            `UPDATE orders
-             SET y3_request_id = $1, supplier_cost = $2
-             WHERE id = $3
-             RETURNING id, y3_request_id`,
-            [y3RequestId, supplierCost, orderId]
-          );
-
-          if (
-            refUpdate.rowCount !== 1 ||
-            refUpdate.rows[0].y3_request_id !== y3RequestId
-          ) {
-            throw new Error(
-              `Y3 reference was not saved for order ${orderId}; purchase stopped`
-            );
-          }
-
-          console.log("Y3 reference saved for order:", orderId);
-
-
-          y3PurchaseAttempted = true;
-
-          const y3Response = await axios.post(
-            `${Y3_BASE_URL}/data/purchase`,
-            {
-              network: product.network.toUpperCase(),
-              plan_id: y3PlanId,
-              phone: cleanPhone,
-              request_id: y3RequestId
+        const vtuResponse = await axios.post(
+          `${VTUSHARE_BASE_URL}/v1/buydata`,
+          {
+            phone: cleanPhone,
+            network: plan.network,
+            bundle: plan.bundle,
+            type: plan.type
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": authHeader
             },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${Y3_API_KEY}`
-              },
-              timeout: 20000
-            }
+            timeout: 20000
+          }
+        );
+
+        supplierData = vtuResponse.data;
+
+        console.log("VTUShare response:", JSON.stringify(supplierData));
+
+        if (
+          !supplierData ||
+          String(supplierData.status || "").toLowerCase() !== "success" ||
+          !supplierData.ref
+        ) {
+          const e = new Error(
+            supplierData?.message || "VTUShare purchase is not confirmed"
           );
+          e.orderPending = true;
+          throw e;
+        }
 
-          supplierData = y3Response.data;
+        supplierReference = String(supplierData.ref);
 
-          console.log(
-            "Y3 response:",
-            JSON.stringify(supplierData)
-          );
+        const referenceSaved = await pgPool.query(
+          `UPDATE orders
+           SET supplier_reference = $1
+           WHERE id = $2 AND status IN ('pending', 'processing')`,
+          [supplierReference, orderId]
+        );
 
-          if (
-            !supplierData ||
-            String(supplierData.status || "").toLowerCase() !== "success"
-          ) {
-            const e = new Error(
-              supplierData?.message || "Y3 purchase not confirmed"
-            );
-            e.orderPending = true;
-            throw e;
-          }
-
-          if (
-            !supplierData.transaction_id ||
-            supplierData.request_id !== y3RequestId
-          ) {
-            const e = new Error("Y3 purchase reference is not confirmed");
-            e.orderPending = true;
-            throw e;
-          }
-
-          try {
-            const check = await axios.get(
-              `${Y3_BASE_URL}/transactions/${encodeURIComponent(y3RequestId)}`,
-              {
-                headers: {
-                  "Authorization": `Bearer ${Y3_API_KEY}`,
-                  "Accept": "application/json"
-                },
-                timeout: 15000
-              }
-            );
-
-            const tx = check.data?.data;
-
-            if (tx?.request_id !== y3RequestId) {
-              const e = new Error("Y3 transaction reference mismatch");
-              e.orderPending = true;
-              throw e;
-            }
-
-            const finalStatus = String(tx.status || "").toUpperCase();
-
-            if (finalStatus === "FAILED" || finalStatus === "FAILURE") {
-              const e = new Error("Y3 confirmed purchase failure");
-              e.confirmedFailure = true;
-              throw e;
-            }
-
-            if (finalStatus !== "SUCCESS") {
-              const e = new Error("Y3 transaction is still pending");
-              e.orderPending = true;
-              throw e;
-            }
-          } catch (e) {
-            if (e.confirmedFailure || e.orderPending) throw e;
-            const pendingError = new Error(
-              "Unable to verify Y3 yet; transaction needs checking"
-            );
-            pendingError.orderPending = true;
-            throw pendingError;
-          }
-
+        if (referenceSaved.rowCount !== 1) {
+          const e = new Error("Could not save VTUShare transaction reference");
+          e.orderPending = true;
+          throw e;
         }
 
         const successUpdate = await pgPool.query(
           `UPDATE orders
-           SET status = $1, supplier_cost = $2
-           WHERE id = $3 AND status IN ('pending', 'processing')`,
-          ["successful", supplierCost, orderId]
+           SET status = $1, supplier_cost = $2,
+               supplier_name = $3, supplier_reference = $4
+           WHERE id = $5 AND status IN ('pending', 'processing')`,
+          ["successful", supplierCost, supplierName, supplierReference, orderId]
         );
 
         if (successUpdate.rowCount !== 1) {
-          throw new Error(
-            `Order ${orderId} was not marked successful exactly once`
-          );
+          const e = new Error("Could not confirm order status in database");
+          e.orderPending = true;
+          throw e;
         }
 
         return res.status(201).json({
           status: "success",
           message: "Order successful",
           order_id: orderId,
-          supplier: supplierName
+          supplier: supplierName,
+          supplier_reference: supplierReference
         });
 
       } catch (supplierError) {
 
         console.error(
-          "Y3 order error:",
+          "VTUShare order error:",
           supplierError.response?.data ||
           supplierError.message
         );
 
-        if (supplierError.orderPending || (y3PurchaseAttempted && !supplierError.confirmedFailure)) {
+        if (supplierError.orderPending || (vtusharePurchaseAttempted && !supplierError.confirmedFailure)) {
           await pgPool.query(
             "UPDATE orders SET status = $1 WHERE id = $2 AND status IN ('pending', 'processing')",
             ["pending", orderId]
@@ -1505,7 +1397,7 @@ throw new Error("Y3_API_KEY is missing");
             status: "pending",
             message: "Supplier confirmation is pending. Do not repeat this purchase yet.",
             order_id: orderId,
-            supplier: "Y3"
+            supplier: "VTUShare"
           });
         }
 
@@ -1705,7 +1597,8 @@ throw new Error("Y3_API_KEY is missing");
         SELECT orders.id, orders.user_id, users.name, users.email,
                orders.network, orders.data, orders.price, orders.phone,
                orders.status, orders.created_at,
-               orders.supplier_cost, orders.y3_request_id
+               orders.supplier_cost, orders.supplier_name,
+               orders.supplier_reference
         FROM orders
         JOIN users ON users.id = orders.user_id
         ORDER BY orders.id DESC
@@ -1719,7 +1612,8 @@ throw new Error("Y3_API_KEY is missing");
         data: row.data,
         price: Number(row.price),
         supplier_cost: row.supplier_cost === null ? null : Number(row.supplier_cost),
-        y3_request_id: row.y3_request_id,
+        supplier_name: row.supplier_name,
+        supplier_reference: row.supplier_reference,
         phone: row.phone,
         status: row.status,
         date: row.created_at
@@ -1746,7 +1640,7 @@ throw new Error("Y3_API_KEY is missing");
       if (status === "successful" || status === "failed") {
         return res.status(409).json({
           status: "error",
-          message: "Manual final status changes are disabled. Use verified supplier reconciliation for pending Y3 orders."
+          message: "Manual final status changes are disabled. Pending orders must be reviewed against confirmed supplier results."
         });
       }
 
@@ -1796,180 +1690,6 @@ throw new Error("Y3_API_KEY is missing");
     }
   });
 
-
-  app.post("/api/admin/orders/:id/reconcile-y3", requireAdmin, async (req, res) => {
-    const orderId = Number(req.params.id);
-
-    if (!Number.isSafeInteger(orderId) || orderId <= 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid order ID"
-      });
-    }
-
-    try {
-      const found = await pgPool.query(
-        `SELECT id, user_id, price, status, y3_request_id, supplier_cost
-         FROM orders WHERE id = $1`,
-        [orderId]
-      );
-
-      if (found.rowCount === 0) {
-        return res.status(404).json({
-          status: "error",
-          message: "Order not found"
-        });
-      }
-
-      const order = found.rows[0];
-
-      if (!order.y3_request_id) {
-        return res.status(409).json({
-          status: "error",
-          message: "No saved Y3 reference; order was not changed"
-        });
-      }
-
-      if (order.status !== "pending") {
-        return res.status(409).json({
-          status: "error",
-          message: "Order is not pending; no changes made",
-          order_status: order.status
-        });
-      }
-
-      const check = await axios.get(
-        `${Y3_BASE_URL}/transactions/${encodeURIComponent(order.y3_request_id)}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${Y3_API_KEY}`,
-            "Accept": "application/json"
-          },
-          timeout: 15000
-        }
-      );
-
-      const tx = check.data?.data;
-
-      if (!tx || tx.request_id !== order.y3_request_id) {
-        return res.status(202).json({
-          status: "pending",
-          message: "Y3 reference could not be confirmed; order unchanged"
-        });
-      }
-
-      const finalStatus = String(tx.status || "").toUpperCase();
-
-      if (finalStatus !== "SUCCESS" &&
-          finalStatus !== "FAILED" &&
-          finalStatus !== "FAILURE") {
-        return res.status(202).json({
-          status: "pending",
-          message: "Y3 has not confirmed a final result; order unchanged",
-          supplier_status: finalStatus || "UNKNOWN"
-        });
-      }
-
-      if (finalStatus === "SUCCESS" &&
-          (order.supplier_cost === null ||
-           !Number.isFinite(Number(order.supplier_cost)))) {
-        return res.status(409).json({
-          status: "error",
-          message: "Supplier cost is missing; order left pending for review"
-        });
-      }
-
-      const client = await pgPool.connect();
-
-      try {
-        await client.query("BEGIN");
-
-        const locked = await client.query(
-          `SELECT id, user_id, price, status, y3_request_id, supplier_cost
-           FROM orders WHERE id = $1 FOR UPDATE`,
-          [orderId]
-        );
-
-        if (locked.rowCount === 0 ||
-            locked.rows[0].status !== "pending" ||
-            locked.rows[0].y3_request_id !== order.y3_request_id) {
-          await client.query("ROLLBACK");
-          return res.status(409).json({
-            status: "error",
-            message: "Order changed during reconciliation; no refund issued"
-          });
-        }
-
-        const current = locked.rows[0];
-
-        if (finalStatus === "SUCCESS") {
-          const successUpdate = await client.query(
-            `UPDATE orders SET status = 'successful'
-             WHERE id = $1 AND status = 'pending'`,
-            [orderId]
-          );
-
-          if (successUpdate.rowCount !== 1) {
-            throw new Error("Order success status was not updated exactly once");
-          }
-
-          await client.query("COMMIT");
-
-          return res.json({
-            status: "success",
-            message: "Y3 confirmed success; order marked successful",
-            order_id: orderId,
-            supplier_cost: Number(current.supplier_cost)
-          });
-        }
-
-        const refund = await client.query(
-          `UPDATE users SET wallet_balance = wallet_balance + $1
-           WHERE id = $2`,
-          [current.price, current.user_id]
-        );
-
-        if (refund.rowCount !== 1) {
-          throw new Error("Customer wallet was not found; refund not completed");
-        }
-
-        const failedUpdate = await client.query(
-          `UPDATE orders SET status = 'failed'
-           WHERE id = $1 AND status = 'pending'`,
-          [orderId]
-        );
-
-        if (failedUpdate.rowCount !== 1) {
-          throw new Error("Order failure status was not updated exactly once");
-        }
-
-        await client.query("COMMIT");
-
-        return res.json({
-          status: "success",
-          message: "Y3 confirmed failure; customer refunded once",
-          order_id: orderId,
-          refunded_amount: Number(current.price)
-        });
-      } catch (error) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackError) {
-          console.error("Y3 reconciliation rollback error:", rollbackError.message);
-        }
-        throw error;
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error("Y3 reconciliation error:", error.response?.data || error.message);
-
-      return res.status(502).json({
-        status: "error",
-        message: "Unable to safely reconcile this order; it was not intentionally changed"
-      });
-    }
-  });
 
 // WEBSITE
   // =========================
