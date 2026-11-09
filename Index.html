@@ -747,9 +747,13 @@ async function fundWallet() {
         return;
     }
 
-    if (!amount || amount < 100) {
+    if (
+        !Number.isSafeInteger(amount) ||
+        !Number.isSafeInteger(amount * 100) ||
+        amount < 100
+    ) {
         message.innerText =
-            "Enter an amount of at least ₦100.";
+            "Enter a valid whole-naira amount of at least ₦100.";
         return;
     }
 
