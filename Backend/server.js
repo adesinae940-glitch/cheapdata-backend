@@ -26,6 +26,8 @@ const VTUSHARE_BASE_URL = "https://vtushare.com.ng/api";
 const VTUSHARE_EMAIL = process.env.VTUSHARE_EMAIL;
 const VTUSHARE_PASSWORD = process.env.VTUSHARE_PASSWORD;
 const MELE_BASE_URL = "https://meledata.ng/api/v1/developer";
+const OPLUG_API_KEY = process.env.OPLUG_API_KEY;
+const OPLUG_BASE_URL = "https://www.oplug.com.ng/api/v1";
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET;
 const USER_TOKEN_SECRET = process.env.USER_TOKEN_SECRET;
 
@@ -1062,75 +1064,17 @@ app.post("/api/orders", requireUser, async (req, res) => {
         `${String(network).trim().toLowerCase()}|${String(data).trim().toUpperCase()}`;
 
       const PRODUCTS = {
-        "mtn|500MB": {
-          network: "mtn",
-          data: "500MB",
-          price: 240,
-          plan_id: 744
-        },
-        "mtn|1GB": {
-          network: "mtn",
-          data: "1GB",
-          price: 370,
-          plan_id: 752
-        },
-        "mtn|2GB": {
-          network: "mtn",
-          data: "2GB",
-          price: 640,
-          plan_id: 753
-        },
-        "mtn|3GB": { network: "mtn", data: "3GB", price: 910, plan_id: 754 },
-        "mtn|5GB": { network: "mtn", data: "5GB", price: 1450, plan_id: 755 },
-        "mtn|10GB": { network: "mtn", data: "10GB", price: 2800, plan_id: 756 },
-        "mtn|15GB": { network: "mtn", data: "15GB", price: 4100, plan_id: 757 },
-
-        "airtel|1GB": {
-          network: "airtel",
-          data: "1GB",
-          price: 395,
-          plan_id: 528
-        },
-        "airtel|2GB": {
-          network: "airtel",
-          data: "2GB",
-          price: 690,
-          plan_id: 454
-
-        },
-        "glo|1GB": {
-          network: "glo",
-          data: "1GB",
-          price: 300,
-          plan_id: 862
-        },
-        "glo|2GB": {
-          network: "glo",
-          data: "2GB",
-          price: 650,
-          plan_id: 493
-        },
-        "9mobile|500MB": {
-          network: "9mobile",
-          data: "500MB",
-          price: 240,
-          plan_id: "9mobile_500mb_cg"
-        },
-        "9mobile|1GB": {
-          network: "9mobile",
-          data: "1GB",
-          price: 320,
-          plan_id: 733
-        },
-        "9mobile|2GB": {
-          network: "9mobile",
-          data: "2GB",
-          price: 540,
-          plan_id: 734
-        },
-        "9mobile|3GB": { network: "9mobile", data: "3GB", price: 550, plan_id: 735 },
-        "9mobile|5GB": { network: "9mobile", data: "5GB", price: 850, plan_id: 737 },
-        "9mobile|10GB": { network: "9mobile", data: "10GB", price: 1600, plan_id: 738 }
+        "mtn|1GB": { network: "mtn", data: "1GB", price: 450, plan_id: "OPL_501", supplier_cost: 385, supplier_network: 1 },
+        "mtn|2GB": { network: "mtn", data: "2GB", price: 800, plan_id: "oplug_special_3", supplier_cost: 705, supplier_network: 1 },
+        "mtn|3GB": { network: "mtn", data: "3GB", price: 1100, plan_id: "OPL_505", supplier_cost: 956, supplier_network: 1 },
+        "airtel|1GB": { network: "airtel", data: "1GB", price: 450, plan_id: "oplug_special_74", supplier_cost: 335, supplier_network: 3 },
+        "airtel|8GB": { network: "airtel", data: "8GB", price: 2500, plan_id: "OPL_358", supplier_cost: 2468, supplier_network: 3 },
+        "airtel|10GB": { network: "airtel", data: "10GB", price: 2950, plan_id: "oplug_special_93", supplier_cost: 2897, supplier_network: 3 },
+        "glo|1GB": { network: "glo", data: "1GB", price: 350, plan_id: "OPL_528", supplier_cost: 296, supplier_network: 2 },
+        "glo|3GB (1 DAY)": { network: "glo", data: "3GB (1 Day)", price: 900, plan_id: "OPL_583", supplier_cost: 490, supplier_network: 2 },
+        "glo|3GB (30 DAYS)": { network: "glo", data: "3GB (30 Days)", price: 1000, plan_id: "oplug_special_122", supplier_cost: 925, supplier_network: 2 },
+        "glo|5GB": { network: "glo", data: "5GB", price: 1800, plan_id: "oplug_special_126", supplier_cost: 1405, supplier_network: 2 },
+        "glo|10GB": { network: "glo", data: "10GB", price: 2900, plan_id: "OPL_113", supplier_cost: 1850, supplier_network: 2 }
       };
 
       const product = PRODUCTS[productKey];
@@ -1149,26 +1093,11 @@ app.post("/api/orders", requireUser, async (req, res) => {
         });
       }
 
-      // VTUSHARE AVAILABILITY CHECK
-      const vtushareProducts = new Set([
-        "mtn|500MB",
-        "mtn|1GB",
-        "mtn|2GB",
-        "mtn|3GB",
-        "mtn|5GB",
-        "mtn|10GB",
-        "mtn|15GB",
-        "9mobile|1GB",
-        "9mobile|2GB",
-        "9mobile|3GB",
-        "9mobile|5GB",
-        "9mobile|10GB"
-      ]);
-
-      if (!vtushareProducts.has(productKey)) {
-        return res.status(400).json({
+      // OPLUG CONFIGURATION CHECK
+      if (!OPLUG_API_KEY) {
+        return res.status(503).json({
           status: "error",
-          message: "This data plan is currently unavailable"
+          message: "Data supplier is not configured"
         });
       }
 
@@ -1263,131 +1192,91 @@ app.post("/api/orders", requireUser, async (req, res) => {
         client.release();
       }
 
-      let vtusharePurchaseAttempted = false;
+      let oplugPurchaseAttempted = false;
 
       try {
-        let supplierData;
-        const supplierName = "VTUShare";
-        let supplierCost;
-        let supplierReference = null;
-
-        const vtusharePlans = {
-          "mtn|500MB": { bundle: 744, network: 2, type: 12, cost: 140 },
-          "mtn|1GB": { bundle: 752, network: 2, type: 12, cost: 270 },
-          "mtn|2GB": { bundle: 753, network: 2, type: 12, cost: 540 },
-          "mtn|3GB": { bundle: 754, network: 2, type: 12, cost: 810 },
-          "mtn|5GB": { bundle: 755, network: 2, type: 12, cost: 1350 },
-          "mtn|10GB": { bundle: 756, network: 2, type: 12, cost: 2700 },
-          "mtn|15GB": { bundle: 757, network: 2, type: 12, cost: 4000 },
-          "9mobile|1GB": { bundle: 733, network: 5, type: 10, cost: 150 },
-          "9mobile|2GB": { bundle: 734, network: 5, type: 10, cost: 300 },
-          "9mobile|3GB": { bundle: 735, network: 5, type: 10, cost: 450 },
-          "9mobile|5GB": { bundle: 737, network: 5, type: 10, cost: 750 },
-          "9mobile|10GB": { bundle: 738, network: 5, type: 10, cost: 1500 }
-        };
-
-        const plan = vtusharePlans[productKey];
-
-        if (!plan) {
-          throw new Error("VTUShare plan mapping not found");
-        }
-
-        supplierCost = plan.cost;
-
-        const authHeader = `Basic ${getVTUShareAuth()}`;
+        const supplierName = "Oplug";
+        const supplierCost = product.supplier_cost;
+        const requestId = `CDNG-${orderId}-${crypto.randomUUID()}`;
 
         const savedSupplier = await pgPool.query(
           `UPDATE orders
-           SET supplier_name = $1, supplier_cost = $2
-           WHERE id = $3 AND status IN ('pending', 'processing')`,
-          [supplierName, supplierCost, orderId]
+           SET supplier_name = $1, supplier_cost = $2,
+               supplier_reference = $3
+           WHERE id = $4 AND status IN ('pending', 'processing')`,
+          [supplierName, supplierCost, requestId, orderId]
         );
 
         if (savedSupplier.rowCount !== 1) {
-          throw new Error("Could not save supplier details");
+          throw new Error("Could not save Oplug order details");
         }
 
-        vtusharePurchaseAttempted = true;
+        oplugPurchaseAttempted = true;
 
-        const vtuResponse = await axios.post(
-          `${VTUSHARE_BASE_URL}/v1/buydata`,
+        const oplugResponse = await axios.post(
+          `${OPLUG_BASE_URL}/data`,
           {
+            network: product.supplier_network,
             phone: cleanPhone,
-            network: plan.network,
-            bundle: plan.bundle,
-            type: plan.type
+            data_plan: product.plan_id,
+            bypass: false,
+            "request-id": requestId
           },
           {
             headers: {
               "Content-Type": "application/json",
-              "Authorization": authHeader
+              "Authorization": `Token ${OPLUG_API_KEY}`
             },
             timeout: 20000
           }
         );
 
-        supplierData = vtuResponse.data;
+        const supplierData = oplugResponse.data;
+        const supplierStatus = String(supplierData?.status || "").toUpperCase();
 
-        console.log("VTUShare response:", JSON.stringify(supplierData));
-
-        if (
-          !supplierData ||
-          String(supplierData.status || "").toLowerCase() !== "success" ||
-          !supplierData.ref
-        ) {
-          const e = new Error(
-            supplierData?.message || "VTUShare purchase is not confirmed"
+        if (supplierStatus === "SUCCESS") {
+          const successUpdate = await pgPool.query(
+            `UPDATE orders
+             SET status = 'successful'
+             WHERE id = $1 AND status IN ('pending', 'processing')`,
+            [orderId]
           );
-          e.orderPending = true;
-          throw e;
+
+          if (successUpdate.rowCount !== 1) {
+            const e = new Error("Could not confirm order status in database");
+            e.orderPending = true;
+            throw e;
+          }
+
+          return res.status(201).json({
+            status: "success",
+            message: "Order successful",
+            order_id: orderId,
+            supplier: supplierName
+          });
         }
 
-        supplierReference = String(supplierData.ref);
-
-        const referenceSaved = await pgPool.query(
-          `UPDATE orders
-           SET supplier_reference = $1
-           WHERE id = $2 AND status IN ('pending', 'processing')`,
-          [supplierReference, orderId]
+        const e = new Error(
+          supplierData?.message || "Oplug has not confirmed this order"
         );
 
-        if (referenceSaved.rowCount !== 1) {
-          const e = new Error("Could not save VTUShare transaction reference");
+        if (supplierStatus === "FAILED") {
+          e.confirmedFailure = true;
+        } else {
           e.orderPending = true;
-          throw e;
         }
 
-        const successUpdate = await pgPool.query(
-          `UPDATE orders
-           SET status = $1, supplier_cost = $2,
-               supplier_name = $3, supplier_reference = $4
-           WHERE id = $5 AND status IN ('pending', 'processing')`,
-          ["successful", supplierCost, supplierName, supplierReference, orderId]
-        );
-
-        if (successUpdate.rowCount !== 1) {
-          const e = new Error("Could not confirm order status in database");
-          e.orderPending = true;
-          throw e;
-        }
-
-        return res.status(201).json({
-          status: "success",
-          message: "Order successful",
-          order_id: orderId,
-          supplier: supplierName,
-          supplier_reference: supplierReference
-        });
+        throw e;
 
       } catch (supplierError) {
 
         console.error(
-          "VTUShare order error:",
+          "Oplug order error:",
           supplierError.response?.data ||
           supplierError.message
         );
 
-        if (supplierError.orderPending || (vtusharePurchaseAttempted && !supplierError.confirmedFailure)) {
+        if (supplierError.orderPending || (oplugPurchaseAttempted && !supplierError.confirmedFailure)) {
           await pgPool.query(
             "UPDATE orders SET status = $1 WHERE id = $2 AND status IN ('pending', 'processing')",
             ["pending", orderId]
@@ -1397,7 +1286,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
             status: "pending",
             message: "Supplier confirmation is pending. Do not repeat this purchase yet.",
             order_id: orderId,
-            supplier: "VTUShare"
+            supplier: "Oplug"
           });
         }
 
@@ -1465,6 +1354,132 @@ app.post("/api/orders", requireUser, async (req, res) => {
       res.status(500).json({
         status: "error",
         message: "Server error"
+      });
+    }
+  });
+
+
+  // VERIFY OPLUG ORDER
+  app.get("/api/orders/:id/verify", requireUser, async (req, res) => {
+    try {
+      const userId = req.userId;
+      const orderId = Number(req.params.id);
+
+      if (!Number.isInteger(orderId) || orderId < 1) {
+        return res.status(400).json({ status: "error", message: "Invalid order ID" });
+      }
+
+      if (!OPLUG_API_KEY) {
+        return res.status(503).json({ status: "error", message: "Data supplier is not configured" });
+      }
+
+      const found = await pgPool.query(
+        `SELECT id, status, supplier_name, supplier_reference, price
+         FROM orders WHERE id = $1 AND user_id = $2`,
+        [orderId, userId]
+      );
+
+      if (found.rowCount !== 1) {
+        return res.status(404).json({ status: "error", message: "Order not found" });
+      }
+
+      const order = found.rows[0];
+
+      if (order.status !== "pending" && order.status !== "processing") {
+        return res.json({ status: order.status, order_id: orderId });
+      }
+
+      if (order.supplier_name !== "Oplug" || !order.supplier_reference) {
+        return res.status(400).json({ status: "error", message: "Oplug reference not found" });
+      }
+
+      const verifyResponse = await axios.get(
+        `${OPLUG_BASE_URL}/verify-transaction`,
+        {
+          params: { "request-id": order.supplier_reference },
+          headers: { "Authorization": `Token ${OPLUG_API_KEY}` },
+          timeout: 20000
+        }
+      );
+
+      const supplierStatus = String(verifyResponse.data?.status || "").toUpperCase();
+
+      if (supplierStatus === "SUCCESS") {
+        await pgPool.query(
+          `UPDATE orders SET status = 'successful'
+           WHERE id = $1 AND user_id = $2
+           AND status IN ('pending', 'processing')`,
+          [orderId, userId]
+        );
+
+        return res.json({ status: "successful", order_id: orderId });
+      }
+
+      if (supplierStatus !== "FAILED") {
+        return res.json({ status: "pending", order_id: orderId,
+          message: "Supplier confirmation is still pending." });
+      }
+
+      const client = await pgPool.connect();
+      let finalStatus = "pending";
+
+      try {
+        await client.query("BEGIN");
+
+        const locked = await client.query(
+          `SELECT status, price FROM orders
+           WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+          [orderId, userId]
+        );
+
+        if (locked.rowCount !== 1) {
+          throw new Error("Order not found during refund");
+        }
+
+        if (locked.rows[0].status === "pending" ||
+            locked.rows[0].status === "processing") {
+          const refund = await client.query(
+            `UPDATE users SET wallet_balance = wallet_balance + $1
+             WHERE id = $2`,
+            [Number(locked.rows[0].price), userId]
+          );
+
+          if (refund.rowCount !== 1) {
+            throw new Error("Wallet refund failed");
+          }
+
+          await client.query(
+            `UPDATE orders SET status = 'failed'
+             WHERE id = $1 AND user_id = $2`,
+            [orderId, userId]
+          );
+
+          finalStatus = "failed";
+        } else {
+          finalStatus = locked.rows[0].status;
+        }
+
+        await client.query("COMMIT");
+      } catch (refundError) {
+        await client.query("ROLLBACK");
+        throw refundError;
+      } finally {
+        client.release();
+      }
+
+      return res.json({
+        status: finalStatus,
+        order_id: orderId,
+        message: finalStatus === "failed"
+          ? "Supplier confirmed failure. Your wallet has been refunded."
+          : "Order status updated."
+      });
+
+    } catch (error) {
+      console.error("Oplug verification error:", error.response?.data || error.message);
+      return res.status(502).json({
+        status: "pending",
+        message: "Could not confirm the order yet. Please check again later."
       });
     }
   });
