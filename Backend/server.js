@@ -668,17 +668,21 @@ async function startServer() {
       const userId = req.userId;
       const { amount } = req.body;
 
-      if (!amount) {
-        return res.status(400).json({
-          status: "error",
-          message: "Amount is required"
-        });
-      }
+      const validAmount =
+        (typeof amount === "number" && Number.isSafeInteger(amount)) ||
+        (typeof amount === "string" && /^\d+$/.test(amount.trim()));
 
-      if (Number(amount) < 100) {
+      const fundingAmount = Number(amount);
+
+      if (
+        !validAmount ||
+        !Number.isSafeInteger(fundingAmount) ||
+        !Number.isSafeInteger(fundingAmount * 100) ||
+        fundingAmount < 100
+      ) {
         return res.status(400).json({
           status: "error",
-          message: "Minimum funding amount is ₦100"
+          message: "Enter a valid whole-naira amount of at least ₦100"
         });
       }
 
@@ -716,7 +720,7 @@ async function startServer() {
         "https://api.paystack.co/transaction/initialize",
         {
           email,
-          amount: Math.round(Number(amount) * 100),
+          amount: fundingAmount * 100,
           callback_url: "https://cheapdata-backend.onrender.com/",
           metadata: {
             user_id: Number(userId)
@@ -739,7 +743,7 @@ async function startServer() {
         [
           userId,
           "credit",
-          Number(amount),
+          fundingAmount,
           "pending",
           payment.reference
         ]
