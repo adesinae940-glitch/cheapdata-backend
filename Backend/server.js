@@ -1533,6 +1533,36 @@ app.post("/api/orders", requireUser, async (req, res) => {
   // =========================
 
 
+  app.get("/api/admin/oplug-balance", requireAdmin, async (req, res) => {
+    try {
+      if (!OPLUG_API_KEY) {
+        return res.status(503).json({
+          status: "error",
+          message: "Oplug is not configured"
+        });
+      }
+
+      const response = await axios.get(`${OPLUG_BASE_URL}/balance`, {
+        headers: { Authorization: `Token ${OPLUG_API_KEY}` },
+        timeout: 15000
+      });
+
+      return res.json({
+        status: "success",
+        supplier: "Oplug",
+        balance: response.data?.balance,
+        currency: response.data?.currency || "NGN",
+        account_status: response.data?.user?.status || "unknown"
+      });
+    } catch (error) {
+      console.error("Oplug balance check failed:", error.response?.status || error.message);
+      return res.status(502).json({
+        status: "error",
+        message: "Could not check Oplug balance"
+      });
+    }
+  });
+
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       const result = await pgPool.query(`
