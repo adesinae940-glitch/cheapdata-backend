@@ -1076,7 +1076,6 @@ app.post("/api/orders", requireUser, async (req, res) => {
         "airtel|10GB": { network: "airtel", data: "10GB", price: 2950, plan_id: "oplug_special_93", supplier_cost: 2897, supplier_network: 4 },
         "glo|1GB": { network: "glo", data: "1GB", price: 350, plan_id: "OPL_528", supplier_cost: 296, supplier_network: 2 },
         "glo|3GB (1 DAY)": { network: "glo", data: "3GB (1 Day)", price: 900, plan_id: "OPL_583", supplier_cost: 490, supplier_network: 2 },
-        "glo|3GB (30 DAYS)": { network: "glo", data: "3GB (30 Days)", price: 1000, plan_id: "oplug_special_122", supplier_cost: 925, supplier_network: 2 },
         "glo|5GB": { network: "glo", data: "5.2GB (30 Days)", price: 1560, plan_id: "OPL_532", supplier_cost: 1410, supplier_network: 2 },
         "glo|10GB": { network: "glo", data: "10GB", price: 2900, plan_id: "OPL_113", supplier_cost: 1850, supplier_network: 2 }
       };
