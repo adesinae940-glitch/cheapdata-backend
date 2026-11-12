@@ -1239,6 +1239,12 @@ app.post("/api/orders", requireUser, async (req, res) => {
           supplierData?.transaction_status || ""
         ).toUpperCase();
 
+        console.info("Oplug purchase response:", {
+          orderId,
+          requestId,
+          transactionStatus: supplierStatus
+        });
+
         if (supplierStatus === "SUCCESS" || supplierStatus === "SUCCESSFUL") {
           const successUpdate = await pgPool.query(
             `UPDATE orders
@@ -1275,11 +1281,12 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
       } catch (supplierError) {
 
-        console.error(
-          "Oplug order error:",
-          supplierError.response?.data ||
-          supplierError.message
-        );
+        console.error("Oplug order error:", {
+          orderId,
+          httpStatus: supplierError.response?.status || null,
+          errorCode: supplierError.code || null,
+          errorName: supplierError.name || null
+        });
 
         if (supplierError.orderPending || (oplugPurchaseAttempted && !supplierError.confirmedFailure)) {
           await pgPool.query(
@@ -1409,6 +1416,12 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
       const supplierStatus = String(verifyResponse.data?.transaction_status || "").toUpperCase();
 
+      console.info("Oplug verification response:", {
+        orderId,
+        requestReference: order.supplier_reference,
+        transactionStatus: supplierStatus
+      });
+
       if (supplierStatus === "SUCCESS" || supplierStatus === "SUCCESSFUL") {
         await pgPool.query(
           `UPDATE orders SET status = 'successful'
@@ -1485,7 +1498,12 @@ app.post("/api/orders", requireUser, async (req, res) => {
       });
 
     } catch (error) {
-      console.error("Oplug verification error:", error.response?.data || error.message);
+      console.error("Oplug verification error:", {
+        orderId,
+        httpStatus: error.response?.status || null,
+        errorCode: error.code || null,
+        errorName: error.name || null
+      });
       return res.status(502).json({
         status: "pending",
         message: "Could not confirm the order yet. Please check again later."
