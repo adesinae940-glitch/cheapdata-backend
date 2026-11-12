@@ -1068,9 +1068,9 @@ app.post("/api/orders", requireUser, async (req, res) => {
         `${String(network).trim().toLowerCase()}|${String(data).trim().toUpperCase()}`;
 
       const PRODUCTS = {
-        "mtn|1GB": { network: "mtn", data: "1GB", price: 450, plan_id: "OPL_501", supplier_cost: 385, supplier_network: 1 },
-        "mtn|2GB": { network: "mtn", data: "2GB", price: 800, plan_id: "oplug_special_3", supplier_cost: 705, supplier_network: 1 },
-        "mtn|3GB": { network: "mtn", data: "3GB", price: 1100, plan_id: "OPL_505", supplier_cost: 956, supplier_network: 1 },
+        "mtn|1GB": { network: "mtn", data: "1GB", price: 450, plan_id: "OPL_9", supplier_cost: 395, supplier_network: 1 },
+        "mtn|2GB": { network: "mtn", data: "2GB", price: 800, plan_id: "OPL_8", supplier_cost: 700, supplier_network: 1 },
+        "mtn|3GB": { network: "mtn", data: "3GB", price: 1100, plan_id: "OPL_13", supplier_cost: 1040, supplier_network: 1 },
         "airtel|1GB": { network: "airtel", data: "1GB", price: 450, plan_id: "oplug_special_74", supplier_cost: 335, supplier_network: 4 },
         "airtel|8GB": { network: "airtel", data: "8GB", price: 2500, plan_id: "OPL_358", supplier_cost: 2468, supplier_network: 4 },
         "airtel|10GB": { network: "airtel", data: "10GB", price: 2950, plan_id: "oplug_special_93", supplier_cost: 2897, supplier_network: 4 },
@@ -1235,6 +1235,17 @@ app.post("/api/orders", requireUser, async (req, res) => {
         );
 
         const supplierData = oplugResponse.data;
+        const returnedReference = supplierData?.["request-id"];
+
+        if (returnedReference && returnedReference !== requestId) {
+          await pgPool.query(
+            `UPDATE orders
+             SET supplier_reference = $1
+             WHERE id = $2 AND supplier_name = $3`,
+            [returnedReference, orderId, supplierName]
+          );
+        }
+
         const supplierStatus = String(supplierData?.status || "").toUpperCase();
 
         if (supplierStatus === "SUCCESS" || supplierStatus === "SUCCESSFUL") {
