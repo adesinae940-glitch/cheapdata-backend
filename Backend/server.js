@@ -1235,18 +1235,9 @@ app.post("/api/orders", requireUser, async (req, res) => {
         );
 
         const supplierData = oplugResponse.data;
-        const returnedReference = supplierData?.["request-id"];
-
-        if (returnedReference && returnedReference !== requestId) {
-          await pgPool.query(
-            `UPDATE orders
-             SET supplier_reference = $1
-             WHERE id = $2 AND supplier_name = $3`,
-            [returnedReference, orderId, supplierName]
-          );
-        }
-
-        const supplierStatus = String(supplierData?.status || "").toUpperCase();
+        const supplierStatus = String(
+          supplierData?.transaction_status || ""
+        ).toUpperCase();
 
         if (supplierStatus === "SUCCESS" || supplierStatus === "SUCCESSFUL") {
           const successUpdate = await pgPool.query(
@@ -1462,11 +1453,15 @@ app.post("/api/orders", requireUser, async (req, res) => {
             throw new Error("Wallet refund failed");
           }
 
-          await client.query(
+          const failedUpdate = await client.query(
             `UPDATE orders SET status = 'failed'
              WHERE id = $1 AND user_id = $2`,
             [orderId, userId]
           );
+
+          if (failedUpdate.rowCount !== 1) {
+            throw new Error("Order status update failed during refund");
+          }
 
           finalStatus = "failed";
         } else {
