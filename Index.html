@@ -1153,6 +1153,23 @@ async function verifyOrder(orderId) {
     }
 }
 
+function formatOrderDate(value) {
+    if (!value) return "N/A";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "N/A";
+
+    return date.toLocaleString("en-NG", {
+        timeZone: "Africa/Lagos",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+    });
+}
+
 async function showOrders() {
 
     showPage("orders");
@@ -1203,7 +1220,7 @@ async function showOrders() {
                     <p><strong>Phone:</strong> ${order.phone}</p>
                     <p><strong>Amount:</strong> ₦${Number(order.price || 0).toLocaleString()}</p>
                     <p><strong>Order ID:</strong> #${order.id}</p>
-                    <p><strong>Date:</strong> ${order.created_at || order.date || "N/A"}</p>
+                    <p><strong>Date:</strong> ${formatOrderDate(order.created_at || order.date)}</p>
 
                     ${["pending", "processing"].includes(status) && Number.isInteger(Number(order.id))
                         ? `<button type="button" onclick="verifyOrder(${Number(order.id)})">Check Status</button>`
