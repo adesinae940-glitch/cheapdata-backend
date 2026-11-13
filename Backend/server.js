@@ -1281,16 +1281,35 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
       } catch (supplierError) {
 
+        const responseBody = supplierError.response?.data;
+        const redactSensitive = (value) => {
+          let safe = String(value ?? "").slice(0, 200);
+          if (cleanPhone) safe = safe.split(cleanPhone).join("[redacted-phone]");
+          if (OPLUG_API_KEY) safe = safe.split(OPLUG_API_KEY).join("[redacted-key]");
+          return safe
+            .replace(/\b(?:\+?234|0)[789]\d{9}\b/g, "[redacted-phone]")
+            .replace(/[\r\n]+/g, " ");
+        };
+
+        const safeSupplierResponse = {};
+        if (responseBody && typeof responseBody === "object" && !Array.isArray(responseBody)) {
+          for (const key of ["message", "error", "detail", "code", "transaction_status", "status"]) {
+            if (["string", "number", "boolean"].includes(typeof responseBody[key])) {
+              safeSupplierResponse[key] = redactSensitive(responseBody[key]);
+            }
+          }
+        } else if (typeof responseBody === "string") {
+          safeSupplierResponse.text = redactSensitive(responseBody);
+        }
+
         console.error("Oplug order error:", {
           orderId,
+          requestId,
           httpStatus: supplierError.response?.status || null,
           errorCode: supplierError.code || null,
           errorName: supplierError.name || null,
-          supplierMessage: String(
-            supplierError.response?.data?.message ||
-            supplierError.message ||
-            ""
-          ).replace(/[\r\n]+/g, " ").slice(0, 200)
+          supplierResponse: safeSupplierResponse,
+          supplierMessage: redactSensitive(supplierError.message || "")
         });
 
         if (supplierError.orderPending || (oplugPurchaseAttempted && !supplierError.confirmedFailure)) {
