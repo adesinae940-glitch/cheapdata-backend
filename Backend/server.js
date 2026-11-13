@@ -1285,7 +1285,12 @@ app.post("/api/orders", requireUser, async (req, res) => {
           orderId,
           httpStatus: supplierError.response?.status || null,
           errorCode: supplierError.code || null,
-          errorName: supplierError.name || null
+          errorName: supplierError.name || null,
+          supplierMessage: String(
+            supplierError.response?.data?.message ||
+            supplierError.message ||
+            ""
+          ).replace(/[\r\n]+/g, " ").slice(0, 200)
         });
 
         if (supplierError.orderPending || (oplugPurchaseAttempted && !supplierError.confirmedFailure)) {
