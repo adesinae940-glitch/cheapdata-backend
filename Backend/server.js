@@ -199,6 +199,109 @@ function verifyUserToken(token) {
   }
 }
 
+
+async function refundOplugOrder(orderId, userId) {
+  const client = await pgPool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const orderResult = await client.query(
+      `SELECT status, price
+       FROM orders
+       WHERE id = $1 AND user_id = $2
+       FOR UPDATE`,
+      [orderId, userId]
+    );
+
+    if (orderResult.rowCount !== 1) {
+      throw new Error("Refund failed: order not found");
+    }
+
+    const order = orderResult.rows[0];
+    const refundReference = `OPLUG-REFUND-${orderId}`;
+
+    const existingResult = await client.query(
+      `SELECT user_id, type, amount, status
+       FROM wallet_transactions
+       WHERE reference = $1`,
+      [refundReference]
+    );
+
+    if (existingResult.rowCount > 0) {
+      const existing = existingResult.rows[0];
+
+      if (
+        Number(existing.user_id) !== Number(userId) ||
+        existing.type !== "refund" ||
+        existing.status !== "success" ||
+        Number(existing.amount) !== Number(order.price)
+      ) {
+        throw new Error("Refund record does not match the order");
+      }
+
+      if (order.status === "failed") {
+        await client.query("COMMIT");
+        return { refunded: true, alreadyRefunded: true };
+      }
+
+      throw new Error("Refund record exists but order status is inconsistent");
+    }
+
+    if (order.status === "failed") {
+      await client.query("COMMIT");
+      return { refunded: false, reason: "failed_order_without_refund_record" };
+    }
+
+    if (!["pending", "processing"].includes(order.status)) {
+      throw new Error("Order is not eligible for a refund");
+    }
+
+    await client.query(
+      `INSERT INTO wallet_transactions
+       (user_id, type, amount, status, reference)
+       VALUES ($1, 'refund', $2, 'success', $3)`,
+      [userId, Number(order.price), refundReference]
+    );
+
+    const walletResult = await client.query(
+      `UPDATE users
+       SET wallet_balance = wallet_balance + $1
+       WHERE id = $2`,
+      [Number(order.price), userId]
+    );
+
+    if (walletResult.rowCount !== 1) {
+      throw new Error("Refund failed: customer wallet was not updated");
+    }
+
+    const orderUpdate = await client.query(
+      `UPDATE orders
+       SET status = 'failed'
+       WHERE id = $1 AND user_id = $2
+       AND status IN ('pending', 'processing')`,
+      [orderId, userId]
+    );
+
+    if (orderUpdate.rowCount !== 1) {
+      throw new Error("Refund failed: order status was not updated");
+    }
+
+    await client.query("COMMIT");
+    return { refunded: true, alreadyRefunded: false };
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error("Oplug refund rollback error:", rollbackError);
+    }
+
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function startServer() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is not set");
@@ -1070,9 +1173,8 @@ app.post("/api/orders", requireUser, async (req, res) => {
       const PRODUCTS = {
         "mtn|1GB": { network: "mtn", data: "1GB", price: 450, plan_id: "OPL_9", supplier_cost: 395, supplier_network: 1 },
         "mtn|2GB": { network: "mtn", data: "2GB", price: 800, plan_id: "OPL_8", supplier_cost: 700, supplier_network: 1 },
-        "mtn|3GB": { network: "mtn", data: "3GB", price: 1100, plan_id: "OPL_13", supplier_cost: 1040, supplier_network: 1 },
+        "mtn|3GB": { network: "mtn", data: "3GB", price: 1100, plan_id: "oplug_special_4", supplier_cost: 1005, supplier_network: 1 },
         "airtel|1GB": { network: "airtel", data: "1GB", price: 450, plan_id: "oplug_special_74", supplier_cost: 335, supplier_network: 4 },
-        "airtel|8GB": { network: "airtel", data: "8GB", price: 2500, plan_id: "OPL_358", supplier_cost: 2468, supplier_network: 4 },
         "airtel|10GB": { network: "airtel", data: "10GB", price: 2950, plan_id: "oplug_special_93", supplier_cost: 2897, supplier_network: 4 },
         "glo|1GB": { network: "glo", data: "1GB", price: 350, plan_id: "OPL_528", supplier_cost: 296, supplier_network: 2 },
         "glo|3GB (1 DAY)": { network: "glo", data: "3GB (1 Day)", price: 900, plan_id: "OPL_583", supplier_cost: 490, supplier_network: 2 },
@@ -1129,6 +1231,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
 
       const client = await pgPool.connect();
       let orderId;
+      let requestId;
 
       try {
         await client.query("BEGIN");
@@ -1200,7 +1303,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
       try {
         const supplierName = "Oplug";
         const supplierCost = product.supplier_cost;
-        const requestId = `CDNG-${orderId}-${crypto.randomUUID()}`;
+        requestId = `CDNG${orderId}${crypto.randomUUID().replace(/-/g, "")}`;
 
         const savedSupplier = await pgPool.query(
           `UPDATE orders
@@ -1235,9 +1338,37 @@ app.post("/api/orders", requireUser, async (req, res) => {
         );
 
         const supplierData = oplugResponse.data;
-        const supplierStatus = String(
+        let supplierMessage = supplierData?.message;
+        let supplierStatus = String(
           supplierData?.transaction_status || ""
         ).toUpperCase();
+
+        if (!["SUCCESS", "SUCCESSFUL", "FAILED"].includes(supplierStatus)) {
+          const verificationResponse = await axios.get(
+            OPLUG_BASE_URL + "/verify-transaction",
+            {
+              params: { "request-id": requestId },
+              headers: {
+                "Authorization": "Token " + OPLUG_API_KEY
+              },
+              timeout: 20000
+            }
+          );
+
+          const verificationData = verificationResponse.data;
+          supplierStatus = String(
+            verificationData?.transaction_status || ""
+          ).toUpperCase();
+
+          supplierMessage =
+            verificationData?.message || supplierMessage;
+
+          console.info("Oplug automatic verification:", {
+            orderId,
+            requestId,
+            transactionStatus: supplierStatus
+          });
+        }
 
         console.info("Oplug purchase response:", {
           orderId,
@@ -1246,15 +1377,69 @@ app.post("/api/orders", requireUser, async (req, res) => {
         });
 
         if (supplierStatus === "SUCCESS" || supplierStatus === "SUCCESSFUL") {
-          const successUpdate = await pgPool.query(
-            `UPDATE orders
-             SET status = 'successful'
-             WHERE id = $1 AND status IN ('pending', 'processing')`,
-            [orderId]
-          );
+          const successClient = await pgPool.connect();
+          let finalStatus;
 
-          if (successUpdate.rowCount !== 1) {
-            const e = new Error("Could not confirm order status in database");
+          try {
+            await successClient.query("BEGIN");
+
+            const lockedOrder = await successClient.query(
+              `SELECT status FROM orders
+               WHERE id = $1 AND user_id = $2
+               FOR UPDATE`,
+              [orderId, userId]
+            );
+
+            if (lockedOrder.rowCount !== 1) {
+              throw new Error("Order not found during success confirmation");
+            }
+
+            const currentStatus = lockedOrder.rows[0].status;
+
+            if (
+              currentStatus === "pending" ||
+              currentStatus === "processing"
+            ) {
+              const successUpdate = await successClient.query(
+                `UPDATE orders SET status = 'successful'
+                 WHERE id = $1 AND user_id = $2
+                 AND status IN ('pending', 'processing')`,
+                [orderId, userId]
+              );
+
+              if (successUpdate.rowCount !== 1) {
+                throw new Error("Could not update order to successful");
+              }
+
+              finalStatus = "successful";
+            } else {
+              finalStatus = currentStatus;
+            }
+
+            await successClient.query("COMMIT");
+          } catch (successError) {
+            try {
+              await successClient.query("ROLLBACK");
+            } catch (rollbackError) {
+              console.error("Success rollback error:", rollbackError);
+            }
+
+            throw successError;
+          } finally {
+            successClient.release();
+          }
+
+          if (finalStatus === "failed") {
+            return res.status(409).json({
+              status: "failed",
+              message: "The order was already marked failed, but Oplug now reports success. Contact support before making another purchase.",
+              order_id: orderId,
+              supplier: supplierName
+            });
+          }
+
+          if (finalStatus !== "successful") {
+            const e = new Error("Order already has a different final status");
             e.orderPending = true;
             throw e;
           }
@@ -1268,7 +1453,7 @@ app.post("/api/orders", requireUser, async (req, res) => {
         }
 
         const e = new Error(
-          supplierData?.message || "Oplug has not confirmed this order"
+          supplierMessage || "Oplug has not confirmed this order"
         );
 
         if (supplierStatus === "FAILED") {
@@ -1313,10 +1498,25 @@ app.post("/api/orders", requireUser, async (req, res) => {
         });
 
         if (supplierError.orderPending || (oplugPurchaseAttempted && !supplierError.confirmedFailure)) {
-          await pgPool.query(
-            "UPDATE orders SET status = $1 WHERE id = $2 AND status IN ('pending', 'processing')",
-            ["pending", orderId]
+          const pendingUpdate = await pgPool.query(
+            `UPDATE orders
+             SET status = $1
+             WHERE id = $2 AND user_id = $3
+             AND status IN ('pending', 'processing')`,
+            ["pending", orderId, userId]
           );
+
+          if (pendingUpdate.rowCount !== 1) {
+            console.error("Could not confirm pending order ownership/status:", {
+              orderId
+            });
+
+            return res.status(409).json({
+              status: "error",
+              message: "Order status could not be confirmed. Contact support before trying again.",
+              order_id: orderId
+            });
+          }
 
           return res.status(202).json({
             status: "pending",
@@ -1326,45 +1526,13 @@ app.post("/api/orders", requireUser, async (req, res) => {
           });
         }
 
-        const refundClient = await pgPool.connect();
         let refundSucceeded = false;
 
         try {
-          await refundClient.query("BEGIN");
-
-          const refundWallet = await refundClient.query(
-            `UPDATE users
-             SET wallet_balance = wallet_balance + $1
-             WHERE id = $2`,
-            [product.price, userId]
-          );
-
-          if (refundWallet.rowCount !== 1) {
-            throw new Error("Refund failed: customer wallet was not updated");
-          }
-
-          const failedOrder = await refundClient.query(
-            `UPDATE orders
-             SET status = $1
-             WHERE id = $2 AND status IN ('pending', 'processing')`,
-            ["failed", orderId]
-          );
-
-          if (failedOrder.rowCount !== 1) {
-            throw new Error("Refund failed: order was not marked failed exactly once");
-          }
-
-          await refundClient.query("COMMIT");
-          refundSucceeded = true;
+          const refundResult = await refundOplugOrder(orderId, userId);
+          refundSucceeded = refundResult.refunded;
         } catch (refundError) {
-          try {
-            await refundClient.query("ROLLBACK");
-          } catch (rollbackError) {
-            console.error("Refund rollback error:", rollbackError);
-          }
           console.error("Order refund error:", refundError);
-        } finally {
-          refundClient.release();
         }
 
         if (!refundSucceeded) {
@@ -1447,14 +1615,62 @@ app.post("/api/orders", requireUser, async (req, res) => {
       });
 
       if (supplierStatus === "SUCCESS" || supplierStatus === "SUCCESSFUL") {
-        await pgPool.query(
-          `UPDATE orders SET status = 'successful'
-           WHERE id = $1 AND user_id = $2
-           AND status IN ('pending', 'processing')`,
-          [orderId, userId]
-        );
+        const successClient = await pgPool.connect();
+        let finalStatus;
 
-        return res.json({ status: "successful", order_id: orderId });
+        try {
+          await successClient.query("BEGIN");
+
+          const lockedOrder = await successClient.query(
+            `SELECT status FROM orders
+             WHERE id = $1 AND user_id = $2
+             FOR UPDATE`,
+            [orderId, userId]
+          );
+
+          if (lockedOrder.rowCount !== 1) {
+            throw new Error("Order not found during success confirmation");
+          }
+
+          const currentStatus = lockedOrder.rows[0].status;
+
+          if (
+            currentStatus === "pending" ||
+            currentStatus === "processing"
+          ) {
+            const successUpdate = await successClient.query(
+              `UPDATE orders SET status = 'successful'
+               WHERE id = $1 AND user_id = $2
+               AND status IN ('pending', 'processing')`,
+              [orderId, userId]
+            );
+
+            if (successUpdate.rowCount !== 1) {
+              throw new Error("Could not update order to successful");
+            }
+
+            finalStatus = "successful";
+          } else {
+            finalStatus = currentStatus;
+          }
+
+          await successClient.query("COMMIT");
+        } catch (successError) {
+          try {
+            await successClient.query("ROLLBACK");
+          } catch (rollbackError) {
+            console.error("Success rollback error:", rollbackError);
+          }
+
+          throw successError;
+        } finally {
+          successClient.release();
+        }
+
+        return res.json({
+          status: finalStatus,
+          order_id: orderId
+        });
       }
 
       if (supplierStatus !== "FAILED") {
@@ -1462,56 +1678,17 @@ app.post("/api/orders", requireUser, async (req, res) => {
           message: "Supplier confirmation is still pending." });
       }
 
-      const client = await pgPool.connect();
-      let finalStatus = "pending";
+      const refundResult = await refundOplugOrder(orderId, userId);
 
-      try {
-        await client.query("BEGIN");
-
-        const locked = await client.query(
-          `SELECT status, price FROM orders
-           WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-          [orderId, userId]
-        );
-
-        if (locked.rowCount !== 1) {
-          throw new Error("Order not found during refund");
-        }
-
-        if (locked.rows[0].status === "pending" ||
-            locked.rows[0].status === "processing") {
-          const refund = await client.query(
-            `UPDATE users SET wallet_balance = wallet_balance + $1
-             WHERE id = $2`,
-            [Number(locked.rows[0].price), userId]
-          );
-
-          if (refund.rowCount !== 1) {
-            throw new Error("Wallet refund failed");
-          }
-
-          const failedUpdate = await client.query(
-            `UPDATE orders SET status = 'failed'
-             WHERE id = $1 AND user_id = $2`,
-            [orderId, userId]
-          );
-
-          if (failedUpdate.rowCount !== 1) {
-            throw new Error("Order status update failed during refund");
-          }
-
-          finalStatus = "failed";
-        } else {
-          finalStatus = locked.rows[0].status;
-        }
-
-        await client.query("COMMIT");
-      } catch (refundError) {
-        await client.query("ROLLBACK");
-        throw refundError;
-      } finally {
-        client.release();
+      if (!refundResult.refunded) {
+        return res.status(409).json({
+          status: "error",
+          order_id: orderId,
+          message: "Supplier confirmed failure, but the refund could not be verified. Contact support. No additional wallet credit was issued."
+        });
       }
+
+      const finalStatus = "failed";
 
       return res.json({
         status: finalStatus,
